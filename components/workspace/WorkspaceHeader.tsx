@@ -67,8 +67,9 @@ export default function WorkspaceHeader() {
           >
             <button
               onClick={handleSignOut}
-              className="w-full text-left px-[var(--q-space-16)] py-[var(--q-space-8)] q-sh3 text-[var(--q-text-secondary)] hover:bg-[var(--q-surface-bg)] hover:text-[var(--q-text-primary)] transition-colors"
+              className="w-full flex items-center gap-[var(--q-space-16)] px-[var(--q-space-16)] py-[var(--q-space-8)] q-sh3 text-[var(--q-text-secondary)] hover:bg-[var(--q-surface-bg)] hover:text-[var(--q-text-primary)] transition-colors"
             >
+              <span className="material-symbols-rounded" style={{ fontSize: 24 }}>logout</span>
               Log out
             </button>
           </div>

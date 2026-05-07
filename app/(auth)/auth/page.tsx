@@ -117,7 +117,7 @@ export default function AuthPage() {
 
         {/* Email fallback */}
         {!showEmail ? (
-          <button onClick={() => setShowEmail(true)} className="q-b5 text-[var(--q-text-muted)] hover:text-[var(--q-text-secondary)] transition-colors">
+          <button onClick={() => setShowEmail(true)} className="q-sh3 text-[var(--q-text-secondary)] hover:text-[var(--q-text-primary)] transition-colors">
             Sign in with email instead
           </button>
         ) : (

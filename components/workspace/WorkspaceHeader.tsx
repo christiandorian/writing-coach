@@ -30,7 +30,7 @@ export default function WorkspaceHeader() {
   return (
     <header
       className="flex items-center justify-between px-[var(--q-space-16)] pt-[var(--q-space-20)] pb-[var(--q-space-16)] flex-shrink-0"
-      style={{ position: 'relative', zIndex: 10000 }}
+      style={{ position: 'relative', zIndex: 20000 }}
     >
       {/* Left — menu + logo */}
       <div className="flex items-center gap-[var(--q-space-8)]">
@@ -67,7 +67,7 @@ export default function WorkspaceHeader() {
           >
             <button
               onClick={handleSignOut}
-              className="w-full text-left px-[var(--q-space-16)] py-[var(--q-space-10)] q-b4 text-[var(--q-text-secondary)] hover:bg-[var(--q-surface-bg)] hover:text-[var(--q-text-primary)] transition-colors"
+              className="w-full text-left px-[var(--q-space-16)] py-[var(--q-space-8)] q-sh3 text-[var(--q-text-secondary)] hover:bg-[var(--q-surface-bg)] hover:text-[var(--q-text-primary)] transition-colors"
             >
               Log out
             </button>

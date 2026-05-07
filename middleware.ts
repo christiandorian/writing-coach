@@ -21,7 +21,7 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { user } } = await supabase.auth.getUser().catch(() => ({ data: { user: null } }))
   const { pathname } = request.nextUrl
 
   // Redirect root based on auth state

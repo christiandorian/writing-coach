@@ -241,9 +241,11 @@ function WritingState() {
     setStep('submitting')
     const elapsed = Math.round((Date.now() - startTime) / 1000)
     try {
+      const { data: { user } } = await supabase.auth.getUser()
+
       const { data: sessionData } = await supabase
         .from('sessions')
-        .insert({ prompt_text: prompt, position, response_v1: responseText, time_taken_seconds: elapsed, time_limit_seconds: timeLimitSeconds, status: 'complete' })
+        .insert({ user_id: user?.id ?? null, prompt_text: prompt, position, response_v1: responseText, time_taken_seconds: elapsed, time_limit_seconds: timeLimitSeconds, status: 'complete' })
         .select()
         .single()
 

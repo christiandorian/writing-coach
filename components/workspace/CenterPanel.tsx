@@ -110,6 +110,7 @@ function IdleState() {
       {!hasSources ? (
         <div className="flex flex-col items-center gap-[var(--q-space-16)] text-center w-full max-w-2xl">
           <div className="space-y-[var(--q-space-8)]">
+            <img src="/brand-write.png" alt="" style={{ width: 88, height: 88 }} className="mx-auto object-contain mb-[var(--q-space-16)]" />
             <h2 className="q-h2 text-[var(--q-text-primary)]">Welcome to Writing Coach</h2>
             <p className="q-sh2 text-[var(--q-text-secondary)]">Add some sources to get started.</p>
           </div>

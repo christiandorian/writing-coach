@@ -101,11 +101,14 @@ export default function LeftRail() {
             onDrop={handleDrop}
             className={[
               'm-[var(--q-space-12)] flex flex-col items-center justify-center gap-[var(--q-space-12)]',
-              'rounded-[var(--q-radius-lg)] border-2 border-dashed transition-colors cursor-pointer flex-1',
-              dragging
-                ? 'border-[var(--q-twilight-500)] bg-[var(--q-twilight-100)]'
-                : 'border-[var(--q-border-primary)] hover:border-[var(--q-twilight-300)] hover:bg-[var(--q-twilight-100)]/50',
+              'rounded-[var(--q-radius-lg)] transition-colors cursor-pointer flex-1',
+              dragging ? 'bg-[var(--q-twilight-100)]' : 'hover:bg-[var(--q-twilight-100)]/50',
             ].join(' ')}
+            style={{
+              backgroundImage: dragging
+                ? `url("data:image/svg+xml,%3csvg width='100%25' height='100%25' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100%25' height='100%25' fill='none' rx='16' ry='16' stroke='%234255FF' stroke-width='2' stroke-dasharray='10 10' stroke-linejoin='miter' stroke-miterlimit='4'/%3e%3c/svg%3e")`
+                : `url("data:image/svg+xml,%3csvg width='100%25' height='100%25' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100%25' height='100%25' fill='none' rx='16' ry='16' stroke='%23EDEFF4' stroke-width='2' stroke-dasharray='10 10' stroke-linejoin='miter' stroke-miterlimit='4'/%3e%3c/svg%3e")`,
+            }}
             onClick={() => fileRef.current?.click()}
           >
             <img src="/documents.png" alt="Documents" style={{ width: 108, height: 48 }} className="object-contain" />

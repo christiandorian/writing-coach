@@ -1,17 +1,18 @@
 'use client'
 
-import { scoreColorClass } from '@/lib/utils'
+import { scoreColorClass, toDisplayScore } from '@/lib/utils'
 
 interface ScoreBadgeProps {
-  score: number
+  score: number  // raw 1-10 score from AI
   size?: 'sm' | 'md' | 'lg'
 }
 
 export default function ScoreBadge({ score, size = 'md' }: ScoreBadgeProps) {
+  const display = toDisplayScore(score) // convert to 0-20
   const bgColor =
-    score < 5
+    display < 10
       ? 'bg-[var(--q-cherry-300)]/20'
-      : score <= 7
+      : display <= 14
       ? 'bg-[var(--q-sherbert-300)]/30'
       : 'bg-[var(--q-mint-100)]'
 
@@ -22,8 +23,8 @@ export default function ScoreBadge({ score, size = 'md' }: ScoreBadgeProps) {
   }[size]
 
   return (
-    <span className={`tabular-nums rounded-[var(--q-radius-full)] ${bgColor} ${scoreColorClass(score)} ${sizeClass}`}>
-      {score}/10
+    <span className={`tabular-nums rounded-[var(--q-radius-full)] ${bgColor} ${scoreColorClass(display, 20)} ${sizeClass}`}>
+      {display}/20
     </span>
   )
 }

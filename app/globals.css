@@ -332,6 +332,29 @@ html, body {
   50% { opacity: 0.4; }
 }
 
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+.shimmer {
+  background-image: linear-gradient(
+    90deg,
+    rgba(88, 99, 128, 0.08) 0%,
+    rgba(88, 99, 128, 0.08) 100%
+  ),
+  linear-gradient(
+    90deg,
+    rgba(88, 99, 128, 0) 20%,
+    rgba(88, 99, 128, 0.12) 45%,
+    rgba(88, 99, 128, 0.12) 55%,
+    rgba(88, 99, 128, 0) 80%
+  );
+  background-size: 100% 100%, 800px 100%;
+  background-repeat: no-repeat;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+
 .animate-pulse-danger {
   animation: pulse-danger 1s var(--q-ease-fade) infinite;
 }

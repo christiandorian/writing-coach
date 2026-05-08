@@ -13,7 +13,9 @@ export type RightTab = 'study' | 'chat'
 export interface Source {
   id: string
   name: string
-  content: string   // extracted text, used for prompt generation
+  content: string     // extracted text for AI prompt generation
+  dataUrl?: string    // object URL for preview (rebuilt from fileData on load)
+  fileData?: string   // base64 for binary files — persisted to DB
   type: 'text' | 'pdf'
   selected: boolean
 }
@@ -43,7 +45,7 @@ interface WorkspaceState {
 
   // Actions
   setRightTab: (tab: RightTab) => void
-  addSource: (source: Omit<Source, 'id' | 'selected'>) => void
+  addSource: (source: Omit<Source, 'id' | 'selected'>) => string
   toggleSource: (id: string) => void
   removeSource: (id: string) => void
   startActivity: (prompt: string, category: PromptCategory, timeLimitMinutes: TimeLimitOption) => void
@@ -99,13 +101,16 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
   setRightTab: (tab) => set({ rightTab: tab }),
 
-  addSource: (source) =>
+  addSource: (source) => {
+    const id = crypto.randomUUID()
     set((s) => ({
       sources: [
         ...s.sources,
-        { ...source, id: crypto.randomUUID(), selected: true },
+        { ...source, id, selected: true },
       ],
-    })),
+    }))
+    return id
+  },
 
   toggleSource: (id) =>
     set((s) => ({

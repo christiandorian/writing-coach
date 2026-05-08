@@ -1,23 +1,96 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { useWorkspaceStore } from '@/lib/store/workspace'
 import type { Source } from '@/lib/store/workspace'
 import Button from '@/components/ui/Button'
+import Modal from '@/components/ui/Modal'
+import { createClient } from '@/lib/supabase/client'
 
-export default function LeftRail() {
+export default function LeftRail({ sourcesLoading = false }: { sourcesLoading?: boolean }) {
   const { sources, addSource, toggleSource, removeSource } = useWorkspaceStore()
+  const supabase = createClient()
   const fileRef = useRef<HTMLInputElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
   const [dragging, setDragging] = useState(false)
-  const [textInput, setTextInput] = useState(false)
+  const [addMenuOpen, setAddMenuOpen] = useState(false)
+  const [pasteModalOpen, setPasteModalOpen] = useState(false)
   const [textName, setTextName] = useState('')
   const [textContent, setTextContent] = useState('')
+  const [loadingFile, setLoadingFile] = useState(false)
+  const [loadingSourceId, setLoadingSourceId] = useState<string | null>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  const getUserId = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    return user?.id ?? null
+  }
+
+  const saveSourceToDB = async (source: Source) => {
+    const userId = await getUserId()
+    if (!userId) return
+    await supabase.from('sources').upsert({
+      id: source.id,
+      user_id: userId,
+      name: source.name,
+      content: source.content,
+      file_data: source.fileData ?? null,
+      type: source.type,
+      selected: source.selected,
+    })
+  }
+
+  const deleteSourceFromDB = async (id: string) => {
+    await supabase.from('sources').delete().eq('id', id)
+  }
+
+  const updateSelectedInDB = async (id: string, selected: boolean) => {
+    await supabase.from('sources').update({ selected }).eq('id', id)
+  }
 
   const selectedCount = sources.filter((s) => s.selected).length
 
   const handleFile = async (file: File) => {
-    const text = await file.text()
-    addSource({ name: file.name, content: text, type: 'pdf' })
+    setLoadingFile(true)
+    try {
+      const isPdf = file.type === 'application/pdf' || file.name.endsWith('.pdf')
+      const isImage = file.type.startsWith('image/')
+      if (isPdf || isImage) {
+        // Add placeholder first so user sees the item appear with loading state
+        const dataUrl = URL.createObjectURL(file)
+        const id = addSource({ name: file.name, content: '', dataUrl, type: 'pdf' })
+        setLoadingSourceId(id)
+        // Read as base64 for persistence
+        const arrayBuffer = await file.arrayBuffer()
+        const bytes = new Uint8Array(arrayBuffer)
+        let binary = ''
+        bytes.forEach(b => { binary += String.fromCharCode(b) })
+        const base64 = btoa(binary)
+        // Update store with fileData
+        useWorkspaceStore.setState(state => ({
+          sources: state.sources.map(s =>
+            s.id === id ? { ...s, fileData: base64 } : s
+          )
+        }))
+        const src = useWorkspaceStore.getState().sources.find(s => s.id === id)
+        if (src) await saveSourceToDB({ ...src, fileData: base64 })
+        setLoadingSourceId(null)
+      } else {
+        const id = addSource({ name: file.name, content: '', type: 'text' })
+        setLoadingSourceId(id)
+        const text = await file.text()
+        useWorkspaceStore.setState(state => ({
+          sources: state.sources.map(s =>
+            s.id === id ? { ...s, content: text } : s
+          )
+        }))
+        const src = useWorkspaceStore.getState().sources.find(s => s.id === id)
+        if (src) await saveSourceToDB({ ...src, content: text })
+        setLoadingSourceId(null)
+      }
+    } finally {
+      setLoadingFile(false)
+    }
   }
 
   const handleDrop = (e: React.DragEvent) => {
@@ -27,74 +100,152 @@ export default function LeftRail() {
     if (file) handleFile(file)
   }
 
-  const handleTextAdd = () => {
-    if (!textName.trim() || !textContent.trim()) return
-    addSource({ name: textName.trim(), content: textContent.trim(), type: 'text' })
-    setTextName(''); setTextContent(''); setTextInput(false)
+  // Auto-focus textarea when paste modal opens
+  useEffect(() => {
+    if (pasteModalOpen) {
+      setTimeout(() => textareaRef.current?.focus(), 50)
+    }
+  }, [pasteModalOpen])
+
+  const handlePasteInsert = () => {
+    if (!textContent.trim()) return
+    const name = textName.trim() || 'Pasted text'
+    const id = addSource({ name, content: textContent.trim(), type: 'text' })
+    const src = useWorkspaceStore.getState().sources.find(s => s.id === id)
+    if (src) saveSourceToDB(src)
+    setTextName('')
+    setTextContent('')
+    setPasteModalOpen(false)
   }
 
+  // Close add menu on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setAddMenuOpen(false)
+      }
+    }
+    if (addMenuOpen) document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [addMenuOpen])
+
   return (
-    <div className="flex flex-col h-full bg-[var(--q-surface-bg)] border-r border-[var(--q-twilight-200)]">
+    <div className="flex flex-col h-full bg-[var(--q-surface-base)] border-r border-[var(--q-twilight-200)]">
       {/* Header */}
-      <div className={`flex items-center justify-between px-[var(--q-space-16)] pt-[var(--q-space-16)] pb-[var(--q-space-12)] ${sources.length > 0 ? 'border-b border-[var(--q-border-primary)]' : ''}`}>
-        <div className="flex items-baseline gap-[var(--q-space-8)]">
+      <div className="flex items-center justify-between pl-[var(--q-space-24)] pr-[var(--q-space-16)] pt-[var(--q-space-16)] pb-[var(--q-space-12)]">
+        <div className="flex items-center gap-[var(--q-space-8)]">
           <span className="q-sh3 text-[var(--q-text-primary)]">Sources</span>
-          {sources.length > 0 && (
-            <span className="q-b5 text-[var(--q-text-muted)]">
-              {selectedCount} of {sources.length} selected
-            </span>
+          {loadingFile && (
+            <span className="w-4 h-4 border-2 border-[var(--q-twilight-300)] border-t-[var(--q-twilight-500)] rounded-full animate-spin" />
           )}
         </div>
         <div className="flex items-center gap-[var(--q-space-4)]">
-          <Button variant="text-secondary" size="medium" circle onClick={() => setTextInput((v) => !v)} title="Add text source">
-            <span className="material-symbols-rounded" style={{ fontSize: 20 }}>add_2</span>
-          </Button>
+          {/* Add button with dropdown */}
+          <div className="relative" ref={menuRef}>
+            <Button
+              variant="text-secondary"
+              size="medium"
+              circle
+              onClick={() => setAddMenuOpen((v) => !v)}
+              title="Add source"
+            >
+              <span className="material-symbols-rounded" style={{ fontSize: 20 }}>add_2</span>
+            </Button>
+
+            {addMenuOpen && (
+              <div
+                className="absolute right-0 mt-[var(--q-space-4)] bg-[var(--q-surface-base)] py-[var(--q-space-4)] min-w-[180px]"
+                style={{
+                  borderRadius: 'var(--q-radius-lg)',
+                  border: '1px solid var(--q-border-primary)',
+                  boxShadow: 'var(--q-shadow-md)',
+                  zIndex: 20001,
+                }}
+              >
+                <button
+                  onClick={() => { setAddMenuOpen(false); fileRef.current?.click() }}
+                  className="w-full flex items-center gap-[var(--q-space-12)] px-[var(--q-space-16)] py-[var(--q-space-8)] q-sh3 text-[var(--q-text-secondary)] hover:bg-[var(--q-surface-bg)] hover:text-[var(--q-text-primary)] transition-colors"
+                >
+                  <span className="material-symbols-rounded" style={{ fontSize: 24 }}>upload</span>
+                  Upload files
+                </button>
+                <button
+                  onClick={() => { setAddMenuOpen(false); setPasteModalOpen(true) }}
+                  className="w-full flex items-center gap-[var(--q-space-12)] px-[var(--q-space-16)] py-[var(--q-space-8)] q-sh3 text-[var(--q-text-secondary)] hover:bg-[var(--q-surface-bg)] hover:text-[var(--q-text-primary)] transition-colors"
+                >
+                  <span className="material-symbols-rounded" style={{ fontSize: 24 }}>content_paste</span>
+                  Paste text
+                </button>
+              </div>
+            )}
+          </div>
+
           <Button variant="text-secondary" size="medium" circle onClick={() => fileRef.current?.click()} title="Upload file">
             <span className="material-symbols-rounded" style={{ fontSize: 20 }}>search</span>
           </Button>
         </div>
       </div>
 
-      <input ref={fileRef} type="file" accept=".txt,.pdf,.md" className="hidden"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = '' }} />
+      <input ref={fileRef} type="file" accept=".txt,.pdf,.md,.png,.jpg,.jpeg,.gif,.webp" className="hidden" multiple
+        onChange={(e) => {
+          Array.from(e.target.files ?? []).forEach(handleFile)
+          e.target.value = ''
+        }} />
 
-      {/* Text source input */}
-      {textInput && (
-        <div className="px-[var(--q-space-12)] py-[var(--q-space-12)] border-b border-[var(--q-border-primary)] space-y-[var(--q-space-8)] bg-[var(--q-surface-bg)]">
-          <input
-            value={textName}
-            onChange={(e) => setTextName(e.target.value)}
-            placeholder="Source name"
-            className="w-full q-b5 px-[var(--q-space-12)] py-[var(--q-space-8)] border border-[var(--q-border-primary)] rounded-[var(--q-radius-md)] focus:outline-none focus:ring-1 focus:ring-[var(--q-twilight-300)] bg-white text-[var(--q-text-primary)]"
-          />
-          <textarea
-            value={textContent}
-            onChange={(e) => setTextContent(e.target.value)}
-            placeholder="Paste source text here..."
-            rows={4}
-            className="w-full q-b5 px-[var(--q-space-12)] py-[var(--q-space-8)] border border-[var(--q-border-primary)] rounded-[var(--q-radius-md)] focus:outline-none focus:ring-1 focus:ring-[var(--q-twilight-300)] resize-none bg-white text-[var(--q-text-primary)]"
-          />
-          <div className="flex gap-[var(--q-space-8)]">
-            <button
-              onClick={handleTextAdd}
-              disabled={!textName.trim() || !textContent.trim()}
-              className="flex-1 q-sh5 py-[var(--q-space-6)] rounded-[var(--q-radius-md)] bg-[var(--q-twilight-500)] text-white disabled:opacity-40 hover:bg-[var(--q-twilight-600)] transition-colors"
-            >
-              Add source
-            </button>
-            <button
-              onClick={() => setTextInput(false)}
-              className="q-b5 text-[var(--q-text-muted)] px-[var(--q-space-8)] hover:text-[var(--q-text-primary)]"
-            >
-              Cancel
-            </button>
+      {/* Divider + selection bar — shown when sources exist */}
+      {sources.length > 0 && (
+        <>
+          <div className="px-[var(--q-space-24)]">
+            <div className="h-px bg-[var(--q-border-primary)]" />
           </div>
+          <div style={{ height: 16 }} />
+        <div className="flex items-center gap-[var(--q-space-8)] px-[var(--q-space-24)] py-[var(--q-space-6)]">
+          <p className="flex-1 q-sh4 text-[var(--q-text-secondary)] truncate">
+            {selectedCount} of {sources.length} selected
+          </p>
+          <button
+            onClick={() => selectedCount > 0 && sources.forEach((s) => {
+              if (s.selected) {
+                toggleSource(s.id)
+                updateSelectedInDB(s.id, false)
+              }
+            })}
+            disabled={selectedCount === 0}
+            className={`q-sh4 flex-shrink-0 transition-colors ${
+              selectedCount > 0
+                ? 'text-[var(--q-twilight-500)] hover:text-[var(--q-twilight-600)] cursor-pointer'
+                : 'text-[var(--q-text-disabled)] cursor-default'
+            }`}
+          >
+            Clear all
+          </button>
         </div>
+        </>
       )}
 
       {/* Source list */}
       <div className="flex-1 overflow-y-auto flex flex-col">
-        {sources.length === 0 ? (
+        {sourcesLoading ? (
+          /* Shimmer skeleton matching Quizlet DS */
+          <div className="flex flex-col pt-[var(--q-space-16)]">
+            {/* Selection bar shimmer — same height as real bar (32px = py-6 + 20px line-height) */}
+            <div className="px-[var(--q-space-24)] py-[var(--q-space-6)] flex items-center">
+              <div className="shimmer h-[14px] rounded-[var(--q-radius-full)] w-1/2" />
+            </div>
+            {/* Source row skeletons — same layout as real SourceItem */}
+            <div className="py-[var(--q-space-4)] px-[var(--q-space-16)]">
+              {[143, 110, 130].map((w, i) => (
+                <div key={i} className="flex items-center gap-[var(--q-space-8)] p-[var(--q-space-8)] rounded-[var(--q-radius-12)]">
+                  <div className="shimmer flex-shrink-0 w-10 h-10 rounded-[var(--q-radius-md)]" />
+                  <div className="flex-1 flex flex-col gap-[var(--q-space-4)]">
+                    <div className="shimmer h-[14px] rounded-[var(--q-radius-full)]" style={{ width: w }} />
+                    <div className="shimmer h-[14px] rounded-[var(--q-radius-full)] w-[89px]" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : sources.length === 0 ? (
           <div
             onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
             onDragLeave={() => setDragging(false)}
@@ -106,74 +257,195 @@ export default function LeftRail() {
             ].join(' ')}
             style={{
               backgroundImage: dragging
-                ? `url("data:image/svg+xml,%3csvg width='100%25' height='100%25' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100%25' height='100%25' fill='none' rx='16' ry='16' stroke='%234255FF' stroke-width='2' stroke-dasharray='10 10' stroke-linejoin='miter' stroke-miterlimit='4'/%3e%3c/svg%3e")`
-                : `url("data:image/svg+xml,%3csvg width='100%25' height='100%25' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100%25' height='100%25' fill='none' rx='16' ry='16' stroke='%23D9DDE8' stroke-width='2' stroke-dasharray='10 10' stroke-linejoin='miter' stroke-miterlimit='4'/%3e%3c/svg%3e")`,
+                ? `url("data:image/svg+xml,%3csvg width='100%25' height='100%25' xmlns='http://www.w3.org/2000/svg'%3e%3crect x='1' y='1' width='99%25' height='99%25' fill='none' rx='15' ry='15' stroke='%234255FF' stroke-width='2' stroke-dasharray='10 10' stroke-linejoin='miter' stroke-miterlimit='4'/%3e%3c/svg%3e")`
+                : `url("data:image/svg+xml,%3csvg width='100%25' height='100%25' xmlns='http://www.w3.org/2000/svg'%3e%3crect x='1' y='1' width='99%25' height='99%25' fill='none' rx='15' ry='15' stroke='%23D9DDE8' stroke-width='2' stroke-dasharray='10 10' stroke-linejoin='miter' stroke-miterlimit='4'/%3e%3c/svg%3e")`,
             }}
             onClick={() => fileRef.current?.click()}
           >
             <img src="/documents.png" alt="Documents" style={{ width: 108, height: 48 }} className="object-contain" />
-            <div className="text-center space-y-[var(--q-space-4)]">
-              <p className="q-sh3 text-[var(--q-text-muted)]">Drag and drop documents here</p>
-            </div>
-            <Button
-              size="large"
-              variant="primary"
-              onClick={(e) => { e.stopPropagation(); fileRef.current?.click() }}
-            >
+            <p className="q-sh3 text-[var(--q-text-muted)] text-center">Drag and drop documents here</p>
+            <Button size="large" variant="primary" onClick={(e) => { e.stopPropagation(); fileRef.current?.click() }}>
               Upload a file
             </Button>
           </div>
         ) : (
-          <div className="py-[var(--q-space-4)]">
+          <div className="py-[var(--q-space-4)] px-[var(--q-space-16)]">
             {sources.map((src) => (
-              <SourceItem key={src.id} source={src} onToggle={() => toggleSource(src.id)} onRemove={() => removeSource(src.id)} />
+              <SourceItem
+                key={src.id}
+                source={src}
+                loading={loadingSourceId === src.id}
+                onToggle={() => {
+                  toggleSource(src.id)
+                  updateSelectedInDB(src.id, !src.selected)
+                }}
+                onRemove={() => {
+                  removeSource(src.id)
+                  deleteSourceFromDB(src.id)
+                }}
+              />
             ))}
           </div>
         )}
       </div>
 
-      {/* Clear all */}
-      {selectedCount > 0 && (
-        <div className="px-[var(--q-space-16)] py-[var(--q-space-8)] border-t border-[var(--q-border-primary)]">
-          <button
-            onClick={() => sources.forEach((s) => s.selected && toggleSource(s.id))}
-            className="q-b5 text-[var(--q-text-muted)] hover:text-[var(--q-cherry-500)] transition-colors"
-          >
-            Clear all
-          </button>
+
+      {/* Paste text modal */}
+      <Modal
+        open={pasteModalOpen}
+        onClose={() => setPasteModalOpen(false)}
+        title="Paste copied text"
+        subtitle="Paste your copied text below to upload as a source"
+      >
+        <div className="space-y-[var(--q-space-16)]">
+          <textarea
+            ref={textareaRef}
+            value={textContent}
+            onChange={(e) => setTextContent(e.target.value)}
+            placeholder="Paste text here"
+            rows={8}
+            className="w-full bg-[var(--q-surface-bg)] border border-[var(--q-border-primary)] rounded-[var(--q-radius-md)] text-[var(--q-text-primary)] placeholder-[var(--q-text-muted)] px-[var(--q-space-12)] py-[var(--q-space-10)] q-b3 focus:outline-none focus:ring-2 focus:ring-[var(--q-twilight-300)] focus:border-transparent resize-none transition-all"
+          />
+          <div className="flex justify-end">
+            <Button size="large" onClick={handlePasteInsert} disabled={!textContent.trim()}>
+              Insert
+            </Button>
+          </div>
         </div>
-      )}
+      </Modal>
     </div>
   )
 }
 
-function SourceItem({ source, onToggle, onRemove }: { source: Source; onToggle: () => void; onRemove: () => void }) {
+function SourceItem({ source, loading = false, onToggle, onRemove }: { source: Source; loading?: boolean; onToggle: () => void; onRemove: () => void }) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [viewOpen, setViewOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+    if (menuOpen) document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [menuOpen])
+
   return (
-    <div
-      className={[
-        'flex items-center gap-[var(--q-space-12)] px-[var(--q-space-12)] py-[var(--q-space-10)]',
-        'cursor-pointer group hover:bg-[var(--q-surface-bg)] transition-colors',
-        source.selected ? 'bg-[var(--q-twilight-100)]/40' : '',
-      ].join(' ')}
-      onClick={onToggle}
-    >
-      <span className="q-b4 text-[var(--q-text-muted)] flex-shrink-0">
-        {source.type === 'pdf' ? '📄' : '📝'}
-      </span>
-      <div className="flex-1 min-w-0">
-        <p className="q-sh5 text-[var(--q-text-primary)] truncate">{source.name}</p>
-        <p className="q-b5 text-[var(--q-text-muted)]">{source.type.toUpperCase()}</p>
+    <>
+      <div
+        className={[
+          'flex items-center gap-[var(--q-space-8)] p-[var(--q-space-8)]',
+          'cursor-pointer group transition-all',
+          'rounded-[var(--q-radius-12)]',
+          loading ? 'opacity-50 pointer-events-none' : '',
+          source.selected ? 'bg-[var(--q-twilight-100)]/40' : 'hover:bg-[var(--q-surface-bg)]',
+        ].join(' ')}
+        onClick={onToggle}
+      >
+        {/* Thumbnail */}
+        <div
+          className="flex-shrink-0 w-10 h-10 rounded-[var(--q-radius-md)] flex items-center justify-center overflow-hidden"
+          style={{ backgroundColor: '#EDEFF4' }}
+        >
+          {loading ? (
+            <span className="w-5 h-5 border-2 border-[var(--q-gray-400)] border-t-[var(--q-twilight-500)] rounded-full animate-spin" />
+          ) : (
+            <span className="material-symbols-rounded" style={{ fontSize: 24, color: '#586380' }}>
+              {source.type === 'pdf'
+                ? (source.name?.match(/\.(png|jpg|jpeg|gif|webp)$/i) ? 'image' : 'docs')
+                : 'content_paste'}
+            </span>
+          )}
+        </div>
+
+        {/* Text */}
+        <div className="flex-1 min-w-0">
+          <p className="q-sh4 text-[var(--q-text-primary)] truncate">
+            {source.type === 'text' ? source.content : source.name}
+          </p>
+          <p className="q-sh5 text-[var(--q-text-secondary)]">
+            {source.type === 'text'
+              ? 'Pasted text'
+              : source.name?.split('.').pop()?.toUpperCase() ?? 'PDF'}
+          </p>
+        </div>
+
+        {/* More options menu */}
+        <div className="relative flex-shrink-0" ref={menuRef}>
+          <Button
+            variant="text-secondary"
+            size="medium"
+            circle
+            onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v) }}
+            title="More options"
+          >
+            <span className="material-symbols-rounded" style={{ fontSize: 24 }}>more_horiz</span>
+          </Button>
+
+          {menuOpen && (
+            <div
+              className="absolute right-0 mt-[var(--q-space-4)] bg-[var(--q-surface-base)] py-[var(--q-space-4)] min-w-[160px]"
+              style={{
+                borderRadius: 'var(--q-radius-lg)',
+                border: '1px solid var(--q-border-primary)',
+                boxShadow: 'var(--q-shadow-md)',
+                zIndex: 20001,
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                onClick={() => { setMenuOpen(false); setViewOpen(true) }}
+                className="w-full flex items-center gap-[var(--q-space-12)] px-[var(--q-space-16)] py-[var(--q-space-8)] q-sh3 text-[var(--q-text-secondary)] hover:bg-[var(--q-surface-bg)] hover:text-[var(--q-text-primary)] transition-colors"
+              >
+                <span className="material-symbols-rounded" style={{ fontSize: 24 }}>visibility</span>
+                View
+              </button>
+              <button
+                onClick={() => { setMenuOpen(false); onRemove() }}
+                className="w-full flex items-center gap-[var(--q-space-12)] px-[var(--q-space-16)] py-[var(--q-space-8)] q-sh3 text-[var(--q-text-error)] hover:bg-[var(--q-surface-bg)] transition-colors"
+              >
+                <span className="material-symbols-rounded" style={{ fontSize: 24 }}>delete</span>
+                Remove
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Select/deselect */}
+        <Button
+          variant="text-secondary"
+          size="medium"
+          circle
+          onClick={(e) => { e.stopPropagation(); onToggle() }}
+          title={source.selected ? 'Deselect' : 'Select'}
+          className={`flex-shrink-0 transition-colors ${source.selected ? 'text-[var(--q-twilight-500)]' : ''}`}
+        >
+          <span className="material-symbols-rounded" style={{ fontSize: 24 }}>
+            {source.selected ? 'check_circle' : 'radio_button_unchecked'}
+          </span>
+        </Button>
       </div>
-      {source.selected ? (
-        <span className="w-5 h-5 rounded-full bg-[var(--q-twilight-500)] flex items-center justify-center flex-shrink-0">
-          <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-            <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </span>
-      ) : (
-        <span className="w-5 h-5 rounded-full border-2 border-[var(--q-border-primary)] flex-shrink-0 group-hover:border-[var(--q-twilight-300)] transition-colors" />
-      )}
-    </div>
+
+      {/* View source modal */}
+      <Modal open={viewOpen} onClose={() => setViewOpen(false)} title={source.type === 'text' ? 'Pasted text' : source.name}>
+        {source.dataUrl ? (
+          source.name?.match(/\.(png|jpg|jpeg|gif|webp)$/i) ? (
+            <div className="rounded-[var(--q-radius-md)] overflow-hidden bg-[var(--q-surface-bg)] flex items-center justify-center" style={{ maxHeight: '65vh' }}>
+              <img src={source.dataUrl} alt={source.name} className="max-w-full max-h-full object-contain" />
+            </div>
+          ) : (
+            <div className="rounded-[var(--q-radius-md)] overflow-hidden bg-[var(--q-surface-bg)]" style={{ height: '65vh' }}>
+              <iframe src={source.dataUrl} className="w-full h-full border-0" title={source.name} />
+            </div>
+          )
+        ) : (
+          <div className="max-h-[60vh] overflow-y-auto bg-[var(--q-surface-bg)] rounded-[var(--q-radius-md)] p-[var(--q-space-16)]">
+            <p className="q-b3 text-[var(--q-text-primary)] whitespace-pre-wrap leading-relaxed break-words">{source.content}</p>
+          </div>
+        )}
+      </Modal>
+    </>
   )
 }
-

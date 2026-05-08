@@ -3,7 +3,7 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { useWorkspaceStore } from '@/lib/store/workspace'
 import { createClient } from '@/lib/supabase/client'
-import { countWords, scoreColorClass } from '@/lib/utils'
+import { countWords, scoreColorClass, computeTotalScore, toDisplayScore } from '@/lib/utils'
 import PromptDisplay from '@/components/session/PromptDisplay'
 import PositionInput from '@/components/session/PositionInput'
 import WritingArea from '@/components/session/WritingArea'
@@ -26,12 +26,12 @@ const DIMENSIONS = [
   { key: 'tradeoff_awareness' as const, name: 'Tradeoff Awareness', label: 'Were counterarguments acknowledged?' },
 ]
 
-const CATEGORIES: { value: PromptCategory; label: string }[] = [
-  { value: 'general', label: 'General' },
-  { value: 'business', label: 'Business' },
-  { value: 'policy', label: 'Policy' },
-  { value: 'ethics', label: 'Ethics' },
-  { value: 'case_study', label: 'Case Study' },
+const CATEGORIES: { value: PromptCategory; label: string; desc: string }[] = [
+  { value: 'general', label: 'General', desc: 'Broad arguable questions' },
+  { value: 'business', label: 'Business', desc: 'Strategy & decisions' },
+  { value: 'policy', label: 'Policy', desc: 'Governance & public affairs' },
+  { value: 'ethics', label: 'Ethics', desc: 'Moral dilemmas' },
+  { value: 'case_study', label: 'Case Study', desc: 'Real-world scenarios' },
 ]
 
 const TIME_OPTIONS: { value: TimeLimitOption; label: string }[] = [
@@ -106,107 +106,134 @@ function IdleState() {
   }
 
   return panel(
-    <div className="flex flex-col items-center justify-center h-full px-[var(--q-space-32)]">
+        <div className={hasSources ? 'flex flex-col h-full bg-[var(--q-surface-base)]' : 'flex flex-col items-center justify-center h-full px-[var(--q-space-32)]'}>
       {!hasSources ? (
-        <div className="flex flex-col items-center gap-[var(--q-space-16)] text-center w-full max-w-2xl">
-          <div className="space-y-[var(--q-space-8)]">
-            <img src="/brand-write.png" alt="" style={{ width: 88, height: 88 }} className="mx-auto object-contain mb-[var(--q-space-16)]" />
+        <div className="relative flex flex-col items-center gap-[var(--q-space-16)] text-center">
+          <img src="/brand-write.png" alt="" style={{ width: 88, height: 88 }} className="mx-auto object-contain" />
+
+          {/* Text block — hugs content */}
+          <div className="relative flex flex-col items-center gap-[var(--q-space-8)]">
             <h2 className="q-h2 text-[var(--q-text-primary)]">Welcome to Writing Coach</h2>
-            <p className="q-sh2 text-[var(--q-text-secondary)]">Add some sources to get started.</p>
+
+            <p className="q-sh2 text-[var(--q-text-secondary)]">
+              Add some{' '}
+              <span className="relative inline-block">
+                sources
+                <img
+                  src="/underline-scribble.png"
+                  alt=""
+                  className="absolute pointer-events-none select-none object-contain"
+                  style={{ bottom: -2, left: 0, width: '100%' }}
+                />
+              </span>
+              {' '}to get started.
+            </p>
+
+            {/* Arrow — 40px to the left of the subtitle */}
+            <img
+              src="/arrow-scribble.png"
+              alt=""
+              className="absolute pointer-events-none select-none object-contain"
+              style={{ width: 100, top: 'calc(50% + 32px)', transform: 'translateY(-50%)', right: 'calc(100% + 24px)' }}
+            />
           </div>
         </div>
       ) : (
-        <div className="w-full max-w-lg space-y-[var(--q-space-24)]">
-          <div className="text-center space-y-[var(--q-space-8)]">
-            <div className="q-h2 mb-[var(--q-space-12)]">✍️</div>
-            <h2 className="q-h4 text-[var(--q-text-primary)]">Writing Coach</h2>
-            <p className="q-b4 text-[var(--q-text-secondary)]">
-              Argue a position under timed pressure. Get feedback on your reasoning.
-            </p>
-          </div>
-
-          {selectedSources.length > 0 && (
-            <div className="flex items-center gap-[var(--q-space-8)] bg-[var(--q-twilight-100)] rounded-[var(--q-radius-md)] px-[var(--q-space-12)] py-[var(--q-space-8)]">
-              <span className="q-b4 text-[var(--q-twilight-500)]">📎</span>
-              <p className="q-sh5 text-[var(--q-twilight-600)]">
-                Prompt generated from {selectedSources.length} selected source{selectedSources.length !== 1 ? 's' : ''}
-              </p>
-            </div>
-          )}
-
-          <div className="bg-[var(--q-surface-base)] rounded-[var(--q-radius-lg)] border border-[var(--q-border-primary)] shadow-q-sm p-[var(--q-space-20)] space-y-[var(--q-space-20)]">
-            <div className="space-y-[var(--q-space-8)]">
-              <p className="q-sh5 uppercase tracking-wider text-[var(--q-text-muted)]">Topic</p>
-              <div className="flex flex-wrap gap-[var(--q-space-8)]">
-                {CATEGORIES.map((c) => (
-                  <button
-                    key={c.value}
-                    onClick={() => setCategory(c.value)}
-                    className={[
-                      'px-[var(--q-space-12)] py-[var(--q-space-6)] rounded-[var(--q-radius-full)]',
-                      'q-sh5 transition-all border',
-                      category === c.value
-                        ? 'bg-[var(--q-twilight-500)] text-white border-[var(--q-twilight-500)]'
-                        : 'bg-white text-[var(--q-text-secondary)] border-[var(--q-border-primary)] hover:border-[var(--q-twilight-500)] hover:text-[var(--q-twilight-500)]',
-                    ].join(' ')}
-                  >
-                    {c.label}
-                  </button>
-                ))}
+        /* Sources exist — full-height layout with scrollable config + sticky bottom bar */
+        <div className="flex flex-col h-full w-full">
+          {/* Scrollable config area */}
+          <div className="flex-1 overflow-y-auto flex flex-col items-center py-[var(--q-space-32)] px-[var(--q-space-24)] bg-[var(--q-surface-base)]">
+            <div className="w-full max-w-[500px] space-y-[var(--q-space-32)]">
+              {/* Title */}
+              <div className="flex flex-col items-center gap-[var(--q-space-8)] text-center">
+                <img src="/brand-write.png" alt="" style={{ width: 48, height: 48 }} className="object-contain" />
+                <h2 className="q-h2 text-[var(--q-text-primary)]">Welcome to Writing Coach</h2>
+                <p className="q-sh3 text-[var(--q-text-secondary)]">Customize your time limit and prompt type</p>
               </div>
-            </div>
 
-            <div className="space-y-[var(--q-space-8)]">
-              <p className="q-sh5 uppercase tracking-wider text-[var(--q-text-muted)]">Time limit</p>
-              <div className="flex gap-[var(--q-space-8)]">
-                {TIME_OPTIONS.map((t) => (
-                  <button
-                    key={t.value}
-                    onClick={() => setTimeLimit(t.value)}
-                    className={[
-                      'flex-1 py-[var(--q-space-8)] rounded-[var(--q-radius-md)] q-sh5 transition-all border',
-                      timeLimit === t.value
-                        ? 'bg-[var(--q-twilight-500)] text-white border-[var(--q-twilight-500)]'
-                        : 'bg-white text-[var(--q-text-secondary)] border-[var(--q-border-primary)] hover:border-[var(--q-twilight-500)] hover:text-[var(--q-twilight-500)]',
-                    ].join(' ')}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <Button size="lg" className="w-full" onClick={handleStart} disabled={generating}>
-              {generating ? (
-                <span className="flex items-center gap-[var(--q-space-8)] justify-center">
-                  <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                  Generating prompt...
-                </span>
-              ) : 'Start session →'}
-            </Button>
-
-            {genError && (
-              <p className="q-b5 text-[var(--q-text-error)] text-center">⚠ {genError}</p>
-            )}
-          </div>
-
-          {pastSessions.length > 0 && (
-            <div className="space-y-[var(--q-space-8)]">
-              <p className="q-sh5 uppercase tracking-wider text-[var(--q-text-muted)]">Recent sessions</p>
-              <div className="space-y-[var(--q-space-6)]">
-                {pastSessions.slice(0, 4).map((s) => (
-                  <div key={s.id} className="flex items-center justify-between bg-[var(--q-surface-base)] rounded-[var(--q-radius-md)] border border-[var(--q-border-primary)] px-[var(--q-space-16)] py-[var(--q-space-10)]">
-                    <p className="q-b4 text-[var(--q-text-secondary)] truncate flex-1">{s.promptSnippet}</p>
-                    {s.score != null && (
-                      <span className={`q-sh4 tabular-nums ml-[var(--q-space-12)] flex-shrink-0 ${scoreColorClass(Math.round(s.score))}`}>
-                        {Number(s.score).toFixed(1)}
-                      </span>
-                    )}
+              {/* Config */}
+              <div className="space-y-[var(--q-space-24)]">
+                {/* Time limit */}
+                <div className="space-y-[var(--q-space-10)]">
+                  <p className="q-sh5 text-[var(--q-text-secondary)]">Time limit</p>
+                  <div className="flex gap-[var(--q-space-8)]">
+                    {TIME_OPTIONS.map((t) => (
+                      <button
+                        key={t.value}
+                        onClick={() => setTimeLimit(t.value)}
+                        className={[
+                          'flex items-center gap-[var(--q-space-6)] px-[var(--q-space-16)] py-[var(--q-space-8)]',
+                          'rounded-[var(--q-radius-full)] q-sh4 transition-all',
+                          timeLimit === t.value
+                            ? 'bg-[var(--q-selected-bg)] text-[var(--q-twilight-500)]'
+                            : 'bg-[var(--q-surface-bg)] text-[var(--q-text-secondary)] hover:bg-[var(--q-btn-tertiary-bg-hover)]',
+                        ].join(' ')}
+                      >
+                        {timeLimit === t.value && (
+                          <span className="material-symbols-rounded text-[var(--q-twilight-500)]" style={{ fontSize: 16, fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+                        )}
+                        {timeLimit !== t.value && (
+                          <span className="material-symbols-rounded text-[var(--q-text-muted)]" style={{ fontSize: 16 }}>radio_button_unchecked</span>
+                        )}
+                        {t.label}
+                      </button>
+                    ))}
                   </div>
-                ))}
+                </div>
+
+                {/* Prompt type */}
+                <div className="space-y-[var(--q-space-8)]">
+                  <p className="q-sh5 text-[var(--q-text-secondary)]">Prompt type</p>
+                  <div className="space-y-[var(--q-space-8)]">
+                    {CATEGORIES.map((c) => (
+                      <button
+                        key={c.value}
+                        onClick={() => setCategory(c.value)}
+                        className={[
+                          'w-full flex items-center justify-between px-[var(--q-space-24)] py-[var(--q-space-16)]',
+                          'rounded-[var(--q-radius-lg)] transition-all',
+                          category === c.value
+                            ? 'bg-[var(--q-selected-bg)] border-2 border-[var(--q-selected-border)]'
+                            : 'bg-[var(--q-surface-bg)] border-2 border-transparent hover:border-[var(--q-border-primary)]',
+                        ].join(' ')}
+                      >
+                        <span className="q-sh4 text-[var(--q-text-primary)]">{c.label}</span>
+                        <span className="q-b4 text-[var(--q-text-secondary)]">{c.desc}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
-          )}
+          </div>
+
+          {/* Sticky bottom bar with gradient fade */}
+          <div className="flex-shrink-0 relative">
+            {/* Gradient fade from transparent to surface */}
+            <div
+              className="absolute -top-8 left-0 right-0 h-8 pointer-events-none"
+              style={{ background: 'linear-gradient(to bottom, rgba(255,255,255,0), #ffffff)' }}
+            />
+          <div className="bg-[var(--q-surface-base)] px-[var(--q-space-24)] py-[var(--q-space-16)] flex items-center justify-center gap-[var(--q-space-24)]">
+            {genError ? (
+              <p className="q-b5 text-[var(--q-text-error)]">⚠ {genError}</p>
+            ) : (
+              <p className="q-sh4 text-[var(--q-text-muted)]">
+                {selectedSources.length > 0
+                  ? `Based on ${selectedSources.length} source${selectedSources.length !== 1 ? 's' : ''}`
+                  : 'No sources selected'}
+              </p>
+            )}
+            <Button size="large" onClick={handleStart} disabled={generating}>
+              {generating ? (
+                <span className="flex items-center gap-[var(--q-space-8)]">
+                  <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                  Generating...
+                </span>
+              ) : 'Start activity'}
+            </Button>
+          </div>
+          </div>
         </div>
       )}
     </div>
@@ -356,17 +383,17 @@ function FeedbackState() {
     finally { setIsSubmittingRewrite(false) }
   }
 
-  const overall = feedbackV1.overall_score
+  const totalScore = computeTotalScore(feedbackV1.dimensions)
 
   return panel(
     <div className="max-w-3xl mx-auto px-[var(--q-space-24)] py-[var(--q-space-32)] space-y-[var(--q-space-24)]">
       {/* Score + coach note */}
       <div className="bg-[var(--q-surface-base)] rounded-[var(--q-radius-lg)] border border-[var(--q-border-primary)] shadow-q-sm p-[var(--q-space-24)] flex items-center gap-[var(--q-space-24)]">
         <div className="text-center flex-shrink-0">
-          <div className={`q-h1 tabular-nums ${scoreColorClass(Math.round(overall))}`}>
-            {overall.toFixed(1)}
+          <div className={`q-h1 tabular-nums ${scoreColorClass(totalScore, 100)}`}>
+            {totalScore}
           </div>
-          <p className="q-b5 text-[var(--q-text-muted)] mt-[var(--q-space-4)]">out of 10</p>
+          <p className="q-b5 text-[var(--q-text-muted)] mt-[var(--q-space-4)]">out of 100</p>
         </div>
         <div className="flex-1">
           <CoachNote note={feedbackV1.coach_note} />

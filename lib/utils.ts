@@ -15,15 +15,44 @@ export function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
-export function scoreColor(score: number): string {
-  if (score < 5) return '#B00020'
-  if (score <= 7) return '#FF983A'
+/**
+ * Convert a 1-10 dimension score to the 0-100 display scale.
+ * Each of 5 dimensions is worth 20 points (score × 2).
+ */
+export function toDisplayScore(rawScore: number): number {
+  return Math.round(rawScore * 2)
+}
+
+/**
+ * Compute total score out of 100 from a FeedbackDimensions object.
+ */
+export function computeTotalScore(dimensions: {
+  position_clarity: { score: number }
+  argument_structure: { score: number }
+  logical_consistency: { score: number }
+  use_of_evidence: { score: number }
+  tradeoff_awareness: { score: number }
+}): number {
+  const sum =
+    dimensions.position_clarity.score +
+    dimensions.argument_structure.score +
+    dimensions.logical_consistency.score +
+    dimensions.use_of_evidence.score +
+    dimensions.tradeoff_awareness.score
+  return Math.round(sum * 2) // max 100
+}
+
+export function scoreColor(score: number, max = 100): string {
+  const pct = score / max
+  if (pct < 0.5) return '#B00020'
+  if (pct <= 0.7) return '#FF983A'
   return '#18AE79'
 }
 
-export function scoreColorClass(score: number): string {
-  if (score < 5) return 'text-[#B00020]'
-  if (score <= 7) return 'text-[#CC4E00]'
+export function scoreColorClass(score: number, max = 100): string {
+  const pct = score / max
+  if (pct < 0.5) return 'text-[#B00020]'
+  if (pct <= 0.7) return 'text-[#CC4E00]'
   return 'text-[#12815A]'
 }
 

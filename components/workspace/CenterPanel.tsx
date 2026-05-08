@@ -5,7 +5,6 @@ import { useWorkspaceStore } from '@/lib/store/workspace'
 import { createClient } from '@/lib/supabase/client'
 import { countWords, scoreColorClass, computeTotalScore, toDisplayScore } from '@/lib/utils'
 import PromptDisplay from '@/components/session/PromptDisplay'
-import PositionInput from '@/components/session/PositionInput'
 import WritingArea from '@/components/session/WritingArea'
 import CountdownTimer from '@/components/session/CountdownTimer'
 import WordCount from '@/components/session/WordCount'
@@ -14,7 +13,7 @@ import CoachNote from '@/components/feedback/CoachNote'
 import VersionComparison from '@/components/feedback/VersionComparison'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import type { FeedbackResponse } from '@/lib/types'
 import type { PromptCategory, TimeLimitOption } from '@/lib/types'
 
@@ -31,10 +30,11 @@ const CATEGORIES: { value: PromptCategory; label: string; desc: string }[] = [
   { value: 'business', label: 'Business', desc: 'Strategy & decisions' },
   { value: 'policy', label: 'Policy', desc: 'Governance & public affairs' },
   { value: 'ethics', label: 'Ethics', desc: 'Moral dilemmas' },
-  { value: 'case_study', label: 'Case Study', desc: 'Real-world scenarios' },
+  { value: 'case_study', label: 'Custom', desc: 'Real-world scenarios' },
 ]
 
 const TIME_OPTIONS: { value: TimeLimitOption; label: string }[] = [
+  { value: 5,  label: '5 min' },
   { value: 10, label: '10 min' },
   { value: 15, label: '15 min' },
   { value: 20, label: '20 min' },
@@ -47,8 +47,7 @@ export default function CenterPanel() {
     <div className="flex-1 overflow-y-auto bg-[var(--q-surface-bg)] relative">
       <AnimatePresence mode="wait">
         {step === 'idle'       && <IdleState key="idle" />}
-        {step === 'setup'      && <SetupState key="setup" />}
-        {step === 'writing'    && <WritingState key="writing" />}
+        {(step === 'setup' || step === 'writing') && <PromptWritingState key="prompt-writing" />}
         {step === 'submitting' && <SubmittingState key="submitting" />}
         {step === 'feedback'   && <FeedbackState key="feedback" />}
       </AnimatePresence>
@@ -76,10 +75,18 @@ function IdleState() {
   const { sources, startActivity, pastSessions } = useWorkspaceStore()
   const [category, setCategory] = useState<PromptCategory>('general')
   const [timeLimit, setTimeLimit] = useState<TimeLimitOption>(20)
+  const [customContext, setCustomContext] = useState('')
   const [generating, setGenerating] = useState(false)
   const [genError, setGenError] = useState('')
+  const customTextareaRef = useRef<HTMLTextAreaElement>(null)
   const selectedSources = sources.filter((s) => s.selected)
   const hasSources = sources.length > 0
+
+  useEffect(() => {
+    if (category === 'case_study') {
+      customTextareaRef.current?.focus()
+    }
+  }, [category])
 
   const handleStart = async () => {
     setGenerating(true)
@@ -89,7 +96,12 @@ function IdleState() {
       const res = await fetch('/api/prompts/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ category, sourceText: sourceText || undefined }),
+        body: JSON.stringify({
+          category,
+          sourceText: sourceText || undefined,
+          timeLimit,
+          customContext: category === 'case_study' && customContext.trim() ? customContext.trim() : undefined,
+        }),
       })
       const data = await res.json()
       if (!res.ok || !data.prompt) {
@@ -106,7 +118,7 @@ function IdleState() {
   }
 
   return panel(
-        <div className={hasSources ? 'flex flex-col h-full bg-[var(--q-surface-base)]' : 'flex flex-col items-center justify-center h-full px-[var(--q-space-32)]'}>
+        <div className={hasSources ? 'flex flex-col h-full bg-[var(--q-surface-base)]' : 'flex flex-col items-center justify-center h-full px-[var(--q-space-32)] bg-[var(--q-surface-base)]'}>
       {!hasSources ? (
         <div className="relative flex flex-col items-center gap-[var(--q-space-16)] text-center">
           <img src="/brand-write.png" alt="" style={{ width: 88, height: 88 }} className="mx-auto object-contain" />
@@ -144,6 +156,25 @@ function IdleState() {
           {/* Scrollable config area */}
           <div className="flex-1 overflow-y-auto flex flex-col items-center py-[var(--q-space-32)] px-[var(--q-space-24)] bg-[var(--q-surface-base)]">
             <div className="w-full max-w-[500px] space-y-[var(--q-space-32)]">
+              {/* No sources selected notice */}
+              <AnimatePresence initial={false}>
+                {selectedSources.length === 0 && (
+                  <motion.div
+                    key="no-source-notice"
+                    initial={{ height: 0, opacity: 0, marginBottom: 0 }}
+                    animate={{ height: 'auto', opacity: 1, marginBottom: 0 }}
+                    exit={{ height: 0, opacity: 0, marginBottom: 0 }}
+                    transition={{ duration: 0.22, ease: [0.30, 0.00, 0.44, 1.00] }}
+                    className="overflow-hidden"
+                  >
+                    <div className="flex items-center gap-[var(--q-space-12)] px-[var(--q-space-16)] py-[var(--q-space-12)] rounded-[var(--q-radius-md)] bg-[var(--q-cherry-50,#fff5f5)] border border-[var(--q-cherry-200,#fecaca)]">
+                      <span className="material-symbols-rounded text-[var(--q-cherry-500)] shrink-0" style={{ fontSize: 20 }}>warning</span>
+                      <p className="q-sh4 text-[var(--q-cherry-500)]">You need to select a source to start an activity</p>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               {/* Title */}
               <div className="flex flex-col items-center gap-[var(--q-space-8)] text-center">
                 <img src="/brand-write.png" alt="" style={{ width: 48, height: 48 }} className="object-contain" />
@@ -154,7 +185,7 @@ function IdleState() {
               {/* Config */}
               <div className="space-y-[var(--q-space-24)]">
                 {/* Time limit */}
-                <div className="space-y-[var(--q-space-10)]">
+                <div className="space-y-[var(--q-space-12)]">
                   <p className="q-sh5 text-[var(--q-text-secondary)]">Time limit</p>
                   <div className="flex gap-[var(--q-space-8)]">
                     {TIME_OPTIONS.map((t) => (
@@ -162,19 +193,13 @@ function IdleState() {
                         key={t.value}
                         onClick={() => setTimeLimit(t.value)}
                         className={[
-                          'flex items-center gap-[var(--q-space-6)] px-[var(--q-space-16)] py-[var(--q-space-8)]',
-                          'rounded-[var(--q-radius-full)] q-sh4 transition-all',
+                          'flex-1 py-[var(--q-space-8)]',
+                          'rounded-[var(--q-radius-full)] q-sh4 transition-all border-2',
                           timeLimit === t.value
-                            ? 'bg-[var(--q-selected-bg)] text-[var(--q-twilight-500)]'
-                            : 'bg-[var(--q-surface-bg)] text-[var(--q-text-secondary)] hover:bg-[var(--q-btn-tertiary-bg-hover)]',
+                            ? 'border-[var(--q-twilight-500)] text-[var(--q-twilight-500)] bg-[var(--q-selected-bg)]'
+                            : 'border-transparent bg-[var(--q-surface-bg)] text-[var(--q-text-secondary)] hover:bg-[var(--q-btn-tertiary-bg-hover)]',
                         ].join(' ')}
                       >
-                        {timeLimit === t.value && (
-                          <span className="material-symbols-rounded text-[var(--q-twilight-500)]" style={{ fontSize: 16, fontVariationSettings: "'FILL' 1" }}>check_circle</span>
-                        )}
-                        {timeLimit !== t.value && (
-                          <span className="material-symbols-rounded text-[var(--q-text-muted)]" style={{ fontSize: 16 }}>radio_button_unchecked</span>
-                        )}
                         {t.label}
                       </button>
                     ))}
@@ -182,26 +207,56 @@ function IdleState() {
                 </div>
 
                 {/* Prompt type */}
-                <div className="space-y-[var(--q-space-8)]">
+                <div className="space-y-[var(--q-space-12)]">
                   <p className="q-sh5 text-[var(--q-text-secondary)]">Prompt type</p>
-                  <div className="space-y-[var(--q-space-8)]">
+                  <div className="flex gap-[var(--q-space-8)]">
                     {CATEGORIES.map((c) => (
                       <button
                         key={c.value}
                         onClick={() => setCategory(c.value)}
                         className={[
-                          'w-full flex items-center justify-between px-[var(--q-space-24)] py-[var(--q-space-16)]',
-                          'rounded-[var(--q-radius-lg)] transition-all',
+                          'flex-1 py-[var(--q-space-8)]',
+                          'rounded-[var(--q-radius-full)] q-sh4 transition-all border-2',
                           category === c.value
-                            ? 'bg-[var(--q-selected-bg)] border-2 border-[var(--q-selected-border)]'
-                            : 'bg-[var(--q-surface-bg)] border-2 border-transparent hover:border-[var(--q-border-primary)]',
+                            ? 'border-[var(--q-twilight-500)] text-[var(--q-twilight-500)] bg-[var(--q-selected-bg)]'
+                            : 'border-transparent bg-[var(--q-surface-bg)] text-[var(--q-text-secondary)] hover:bg-[var(--q-btn-tertiary-bg-hover)]',
                         ].join(' ')}
                       >
-                        <span className="q-sh4 text-[var(--q-text-primary)]">{c.label}</span>
-                        <span className="q-b4 text-[var(--q-text-secondary)]">{c.desc}</span>
+                        {c.label}
                       </button>
                     ))}
                   </div>
+                  {/* Description box — static for presets, editable textarea for Custom */}
+                  {category === 'case_study' ? (
+                    <textarea
+                      ref={customTextareaRef}
+                      value={customContext}
+                      onChange={(e) => setCustomContext(e.target.value)}
+                      placeholder="Add a custom prompt.."
+                      rows={4}
+                      className={[
+                        'w-full bg-[var(--q-surface-bg)] rounded-[var(--q-radius-md)]',
+                        'p-[var(--q-space-16)] min-h-[96px] resize-none q-sh3',
+                        'text-[var(--q-text-primary)] placeholder-[var(--q-text-muted)]',
+                        'border-2 border-transparent',
+                        'focus:outline-none focus:border-[var(--q-twilight-500)]',
+                        'transition-all',
+                      ].join(' ')}
+                    />
+                  ) : (
+                    <div
+                      className="bg-[var(--q-surface-bg)] rounded-[var(--q-radius-md)] p-[var(--q-space-16)] min-h-[96px] cursor-text border-2 border-transparent"
+                      onClick={() => {
+                        const desc = CATEGORIES.find((c) => c.value === category)?.desc ?? ''
+                        setCustomContext(desc)
+                        setCategory('case_study')
+                      }}
+                    >
+                      <p className="q-sh3 text-[var(--q-text-secondary)]">
+                        {CATEGORIES.find((c) => c.value === category)?.desc}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -221,10 +276,10 @@ function IdleState() {
               <p className="q-sh4 text-[var(--q-text-muted)]">
                 {selectedSources.length > 0
                   ? `Based on ${selectedSources.length} source${selectedSources.length !== 1 ? 's' : ''}`
-                  : 'No sources selected'}
+                  : '0 sources selected'}
               </p>
             )}
-            <Button size="large" onClick={handleStart} disabled={generating}>
+            <Button size="large" onClick={handleStart} disabled={generating || selectedSources.length === 0}>
               {generating ? (
                 <span className="flex items-center gap-[var(--q-space-8)]">
                   <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
@@ -240,54 +295,40 @@ function IdleState() {
   )
 }
 
-/* ── Setup ────────────────────────────────────────────────────────────────── */
+/* ── Prompt + Writing (unified) ───────────────────────────────────────────── */
 
-function SetupState() {
-  const { prompt, category, lockPosition } = useWorkspaceStore()
-  return panel(
-    <div className="max-w-2xl mx-auto px-[var(--q-space-24)] py-[var(--q-space-48)] space-y-[var(--q-space-24)]">
-      <div className="space-y-[var(--q-space-4)]">
-        <p className="q-sh5 uppercase tracking-wider text-[var(--q-text-muted)]">Step 1 of 2</p>
-        <h1 className="q-h4 text-[var(--q-text-primary)]">Read the prompt</h1>
-      </div>
-      <PromptDisplay text={prompt} category={category} />
-      <PositionInput onSubmit={lockPosition} />
-    </div>
-  )
-}
-
-/* ── Writing ──────────────────────────────────────────────────────────────── */
-
-function WritingState() {
-  const { position, responseText, timeLimitSeconds, setResponse, setStep, setSessionId, setFeedbackV1, startTime, prompt, addPastSession } = useWorkspaceStore()
+function PromptWritingState() {
+  const {
+    prompt, category, step, lockPosition,
+    position, responseText, timeLimitSeconds,
+    setResponse, setStep, setSessionId, setFeedbackV1,
+    startTime, addPastSession,
+  } = useWorkspaceStore()
   const supabase = createClient()
   const [showConfirm, setShowConfirm] = useState(false)
   const [autoSubmitted, setAutoSubmitted] = useState(false)
+  const isWriting = step === 'writing'
 
   const handleSubmit = async () => {
     setStep('submitting')
     const elapsed = Math.round((Date.now() - startTime) / 1000)
     try {
       const { data: { user } } = await supabase.auth.getUser()
-
       const { data: sessionData } = await supabase
         .from('sessions')
         .insert({ user_id: user?.id ?? null, prompt_text: prompt, position, response_v1: responseText, time_taken_seconds: elapsed, time_limit_seconds: timeLimitSeconds, status: 'complete' })
         .select()
         .single()
-
       const sessionId = sessionData?.id
       if (sessionId) setSessionId(sessionId)
-
       const res = await fetch('/api/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt, position, response: responseText, time_taken_seconds: elapsed, session_id: sessionId, version: 1 }),
       })
-
       const feedback = await res.json() as FeedbackResponse
+      if (!res.ok || !feedback.dimensions) throw new Error('Invalid feedback response')
       setFeedbackV1(feedback)
-
       if (sessionId) {
         addPastSession({ id: sessionId, promptSnippet: prompt.slice(0, 60) + (prompt.length > 60 ? '...' : ''), score: feedback.overall_score, createdAt: new Date().toISOString() })
       }
@@ -303,35 +344,96 @@ function WritingState() {
   }
 
   return panel(
-    <div className="flex flex-col h-full">
-      <div className="bg-[var(--q-surface-base)] border-b border-[var(--q-border-primary)] px-[var(--q-space-24)] py-[var(--q-space-12)]">
-        <div className="max-w-2xl mx-auto flex items-center justify-between">
-          <WordCount text={responseText} minWords={50} />
-          <CountdownTimer totalSeconds={timeLimitSeconds} onExpire={handleExpire} />
-        </div>
+    <div className="flex flex-col h-full bg-[var(--q-surface-base)]">
+
+      {/* Timer bar — slides down when writing starts */}
+      <AnimatePresence>
+        {isWriting && (
+          <motion.div
+            key="timer-bar"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2, ease: [0.30, 0.00, 0.44, 1.00] }}
+            className="overflow-hidden flex-shrink-0"
+          >
+            <div className="bg-[var(--q-surface-base)] px-[var(--q-space-24)] py-[var(--q-space-24)] flex items-center justify-between">
+              <div className="flex items-center gap-[var(--q-space-8)]">
+                <img src="/brand-write.png" alt="" style={{ width: 24, height: 24 }} className="object-contain" />
+                <span className="q-sh3 text-[var(--q-text-primary)]">Writing Coach</span>
+              </div>
+              <CountdownTimer totalSeconds={timeLimitSeconds} onExpire={handleExpire} />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Main content */}
+      <div className="flex-1 overflow-y-auto">
+        {!isWriting ? (
+          /* ── Phase 1: centered prompt ── */
+          <div className="flex flex-col h-full">
+            <div className="flex-1 flex items-center justify-center px-[var(--q-space-24)] py-[var(--q-space-48)]">
+              <div className="w-full max-w-2xl">
+                <PromptDisplay text={prompt} category={category} />
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* ── Phase 2: 2-up layout ── */
+          <div className="h-full px-[var(--q-space-24)] py-[var(--q-space-24)] flex gap-[var(--q-space-24)]">
+            {/* Left: prompt (sticky) */}
+            <div className="flex-1 min-w-0 self-start sticky top-[var(--q-space-24)]">
+              <PromptDisplay text={prompt} category={category} />
+            </div>
+
+            {/* Right: writing area animates in */}
+            <motion.div
+              initial={{ opacity: 0, x: 16 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.25, ease: [0.30, 0.00, 0.44, 1.00] }}
+              className="flex-1 min-w-0 flex flex-col gap-[var(--q-space-16)]"
+            >
+              <WritingArea value={responseText} onChange={setResponse} />
+              <div className="flex items-center justify-between">
+                <WordCount text={responseText} minWords={50} />
+                <Button onClick={() => setShowConfirm(true)} disabled={countWords(responseText) < 50} size="lg">
+                  Submit for feedback →
+                </Button>
+              </div>
+            </motion.div>
+          </div>
+        )}
       </div>
 
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-2xl mx-auto px-[var(--q-space-24)] py-[var(--q-space-20)] flex flex-col gap-[var(--q-space-16)]">
-          <div className="flex items-start gap-[var(--q-space-8)] bg-[var(--q-twilight-100)] rounded-[var(--q-radius-md)] px-[var(--q-space-16)] py-[var(--q-space-12)]">
-            <span className="q-b4 text-[var(--q-twilight-500)] mt-0.5">📌</span>
-            <p className="q-b4 text-[var(--q-text-secondary)] italic leading-relaxed">{position}</p>
-          </div>
-          <WritingArea value={responseText} onChange={setResponse} />
-          <div className="flex justify-end">
-            <Button onClick={() => setShowConfirm(true)} disabled={countWords(responseText) < 50} size="lg">
-              Submit for feedback →
-            </Button>
-          </div>
-        </div>
-      </div>
+      {/* Bottom bar — fades out when writing starts */}
+      <AnimatePresence>
+        {!isWriting && (
+          <motion.div
+            key="start-bar"
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="flex-shrink-0 relative"
+          >
+            <div
+              className="absolute -top-8 left-0 right-0 h-8 pointer-events-none"
+              style={{ background: 'linear-gradient(to bottom, transparent, var(--q-surface-base))' }}
+            />
+            <div className="bg-[var(--q-surface-base)] px-[var(--q-space-24)] py-[var(--q-space-16)] flex justify-center">
+              <Button size="xlarge" onClick={() => lockPosition('')}>
+                Start writing
+              </Button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <Modal open={showConfirm} onClose={() => setShowConfirm(false)} title="Ready to submit?">
         <div className="space-y-[var(--q-space-20)]">
           <p className="q-b4 text-[var(--q-text-secondary)]">You won't be able to edit after submitting.</p>
-          <div className="flex gap-[var(--q-space-12)]">
-            <Button variant="secondary" size="md" className="flex-1" onClick={() => setShowConfirm(false)}>Keep writing</Button>
-            <Button size="md" className="flex-1" onClick={() => { setShowConfirm(false); handleSubmit() }}>Submit</Button>
+          <div className="flex flex-col gap-[var(--q-space-8)]">
+            <Button size="md" className="w-full" onClick={() => { setShowConfirm(false); handleSubmit() }}>Submit</Button>
+            <Button variant="secondary" size="md" className="w-full" onClick={() => setShowConfirm(false)}>Keep writing</Button>
           </div>
         </div>
       </Modal>

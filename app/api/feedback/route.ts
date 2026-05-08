@@ -49,16 +49,15 @@ export async function POST(req: NextRequest) {
   try {
     const { prompt, position, response, time_taken_seconds, session_id, version = 1 } = await req.json()
 
-    if (!prompt || !position || !response) {
+    if (!prompt || !response) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    const userMessage = `PROMPT: ${prompt}
-
-DECLARED POSITION: ${position}
-
-WRITTEN RESPONSE:
-${response}`
+    const userMessage = [
+      `PROMPT: ${prompt}`,
+      position ? `\nDECLARED POSITION: ${position}` : '',
+      `\nWRITTEN RESPONSE:\n${response}`,
+    ].join('')
 
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o',

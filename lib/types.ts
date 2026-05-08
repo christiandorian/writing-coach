@@ -74,4 +74,4 @@ export interface SessionWithFeedback extends Session {
   feedback?: Feedback[]
 }
 
-export type TimeLimitOption = 10 | 15 | 20 | 30
+export type TimeLimitOption = 5 | 10 | 15 | 20 | 30

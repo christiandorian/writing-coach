@@ -150,7 +150,7 @@ export default function WorkspacePage() {
         {/* Drag handle — 8px grab zone, 1px line on hover, 2px on drag */}
         <div
           onMouseDown={handleMouseDown}
-          className="w-2 flex-shrink-0 cursor-col-resize z-10 relative group"
+          className="w-2 flex-shrink-0 cursor-col-resize z-10 relative group bg-[var(--q-surface-base)]"
         >
           <div
             className="absolute inset-y-0 left-0 bg-transparent group-hover:bg-[var(--q-twilight-400)] transition-all duration-150"

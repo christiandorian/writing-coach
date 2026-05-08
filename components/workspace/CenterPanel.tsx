@@ -84,7 +84,11 @@ function IdleState() {
 
   useEffect(() => {
     if (category === 'case_study') {
-      customTextareaRef.current?.focus()
+      const el = customTextareaRef.current
+      if (el) {
+        el.focus()
+        el.setSelectionRange(el.value.length, el.value.length)
+      }
     }
   }, [category])
 

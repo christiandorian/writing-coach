@@ -10,9 +10,10 @@ interface ModalProps {
   children: React.ReactNode
   title?: string
   subtitle?: string
+  maxWidth?: number
 }
 
-export default function Modal({ open, onClose, children, title, subtitle }: ModalProps) {
+export default function Modal({ open, onClose, children, title, subtitle, maxWidth = 480 }: ModalProps) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
@@ -39,7 +40,7 @@ export default function Modal({ open, onClose, children, title, subtitle }: Moda
             exit={{ opacity: 0, scale: 0.96, y: 8 }}
             transition={{ duration: 0.2, ease: [0.35, 1.40, 0.25, 1.00] }}
             className="relative z-10 w-full mx-[var(--q-space-16)] bg-[var(--q-surface-base)] rounded-[var(--q-radius-lg)] shadow-q-lg p-[var(--q-space-24)]"
-            style={{ maxWidth: 480 }}
+            style={{ maxWidth }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Close button */}

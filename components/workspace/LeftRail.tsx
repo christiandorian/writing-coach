@@ -429,7 +429,7 @@ function SourceItem({ source, loading = false, onToggle, onRemove }: { source: S
       </div>
 
       {/* View source modal */}
-      <Modal open={viewOpen} onClose={() => setViewOpen(false)} title={source.type === 'text' ? 'Pasted text' : source.name}>
+      <Modal open={viewOpen} onClose={() => setViewOpen(false)} title={source.type === 'text' ? 'Pasted text' : source.name} maxWidth={source.dataUrl ? 620 : 480}>
         {source.dataUrl ? (
           source.name?.match(/\.(png|jpg|jpeg|gif|webp)$/i) ? (
             <div className="rounded-[var(--q-radius-md)] overflow-hidden bg-[var(--q-surface-bg)] flex items-center justify-center" style={{ maxHeight: '65vh' }}>

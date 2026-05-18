@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState, useEffect } from 'react'
+import { useRef, useState, useEffect, useLayoutEffect } from 'react'
 import { useWorkspaceStore } from '@/lib/store/workspace'
 import type { Source } from '@/lib/store/workspace'
 import Button from '@/components/ui/Button'
@@ -8,7 +8,7 @@ import Modal from '@/components/ui/Modal'
 import { createClient } from '@/lib/supabase/client'
 
 export default function LeftRail({ sourcesLoading = false }: { sourcesLoading?: boolean }) {
-  const { sources, addSource, toggleSource, removeSource } = useWorkspaceStore()
+  const { sources, addSource, toggleSource, removeSource, setSourceTags } = useWorkspaceStore()
   const supabase = createClient()
   const fileRef = useRef<HTMLInputElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -50,6 +50,19 @@ export default function LeftRail({ sourcesLoading = false }: { sourcesLoading?: 
 
   const selectedCount = sources.filter((s) => s.selected).length
 
+  const generateTags = async (id: string, content: string, name: string) => {
+    try {
+      const res = await fetch('/api/sources/tags', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: content.slice(0, 3000), name }),
+      })
+      if (!res.ok) return
+      const { tags } = await res.json()
+      if (Array.isArray(tags) && tags.length > 0) setSourceTags(id, tags)
+    } catch {}
+  }
+
   const handleFile = async (file: File) => {
     setLoadingFile(true)
     try {
@@ -75,6 +88,7 @@ export default function LeftRail({ sourcesLoading = false }: { sourcesLoading?: 
         const src = useWorkspaceStore.getState().sources.find(s => s.id === id)
         if (src) await saveSourceToDB({ ...src, fileData: base64 })
         setLoadingSourceId(null)
+        generateTags(id, '', file.name)
       } else {
         const id = addSource({ name: file.name, content: '', type: 'text' })
         setLoadingSourceId(id)
@@ -87,6 +101,7 @@ export default function LeftRail({ sourcesLoading = false }: { sourcesLoading?: 
         const src = useWorkspaceStore.getState().sources.find(s => s.id === id)
         if (src) await saveSourceToDB({ ...src, content: text })
         setLoadingSourceId(null)
+        generateTags(id, text, file.name)
       }
     } finally {
       setLoadingFile(false)
@@ -110,12 +125,14 @@ export default function LeftRail({ sourcesLoading = false }: { sourcesLoading?: 
   const handlePasteInsert = () => {
     if (!textContent.trim()) return
     const name = textName.trim() || 'Pasted text'
-    const id = addSource({ name, content: textContent.trim(), type: 'text' })
+    const content = textContent.trim()
+    const id = addSource({ name, content, type: 'text' })
     const src = useWorkspaceStore.getState().sources.find(s => s.id === id)
     if (src) saveSourceToDB(src)
     setTextName('')
     setTextContent('')
     setPasteModalOpen(false)
+    generateTags(id, content, name)
   }
 
   // Close add menu on outside click
@@ -317,10 +334,96 @@ export default function LeftRail({ sourcesLoading = false }: { sourcesLoading?: 
   )
 }
 
+function SourceTagsDisplay({ tags, loading }: { tags?: string[]; loading?: boolean }) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [showAll, setShowAll] = useState(false)
+  const [hasOverflow, setHasOverflow] = useState(false)
+
+  // Two rows = chip height (28px) + gap (8px) + second chip (28px) = 64px
+  const TWO_ROWS_PX = 64
+
+  useLayoutEffect(() => {
+    if (showAll || !containerRef.current || !tags?.length) return
+    const el = containerRef.current
+    setHasOverflow(el.scrollHeight > TWO_ROWS_PX + 2)
+  }, [tags, showAll])
+
+  if (loading) {
+    return (
+      <div className="flex flex-wrap gap-[var(--q-space-8)] mb-[var(--q-space-16)]">
+        {[88, 64, 104, 72, 96, 56].map((w, i) => (
+          <div key={i} className="shimmer h-6 rounded-full" style={{ width: w }} />
+        ))}
+      </div>
+    )
+  }
+
+  if (!tags?.length) return null
+
+  return (
+    <div className="mb-[var(--q-space-16)]">
+      <div
+        ref={containerRef}
+        className="flex flex-wrap gap-[var(--q-space-8)] overflow-hidden"
+        style={{ maxHeight: showAll ? 'none' : TWO_ROWS_PX }}
+      >
+        {tags.map((tag, i) => (
+          <span
+            key={i}
+            className="inline-flex items-center px-[var(--q-space-10)] rounded-[var(--q-radius-full)] bg-[var(--q-gray-300)] q-sh5 text-[var(--q-text-secondary)] whitespace-nowrap"
+            style={{ height: 28 }}
+          >
+            {tag}
+          </span>
+        ))}
+      </div>
+      {hasOverflow && (
+        <Button
+          variant="tertiary"
+          size="xsmall"
+          onClick={() => setShowAll((v) => !v)}
+          className="mt-[var(--q-space-8)] gap-[var(--q-space-4)]"
+        >
+          {showAll ? 'See less' : 'See more'}
+          <span className="material-symbols-rounded" style={{ fontSize: 16 }}>
+            {showAll ? 'expand_less' : 'expand_more'}
+          </span>
+        </Button>
+      )}
+    </div>
+  )
+}
+
 function SourceItem({ source, loading = false, onToggle, onRemove }: { source: Source; loading?: boolean; onToggle: () => void; onRemove: () => void }) {
+  const { setSourceTags } = useWorkspaceStore()
   const [menuOpen, setMenuOpen] = useState(false)
   const [viewOpen, setViewOpen] = useState(false)
+  const [tagsLoading, setTagsLoading] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+
+  // Generate tags lazily when the view modal opens for the first time
+  useEffect(() => {
+    if (!viewOpen || source.tags || tagsLoading) return
+    const run = async () => {
+      setTagsLoading(true)
+      try {
+        const res = await fetch('/api/sources/tags', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            content: (source.content ?? '').slice(0, 3000),
+            name: source.name,
+          }),
+        })
+        if (res.ok) {
+          const { tags } = await res.json()
+          if (Array.isArray(tags) && tags.length > 0) setSourceTags(source.id, tags)
+        }
+      } catch {}
+      setTagsLoading(false)
+    }
+    run()
+  }, [viewOpen])
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -430,6 +533,7 @@ function SourceItem({ source, loading = false, onToggle, onRemove }: { source: S
 
       {/* View source modal */}
       <Modal open={viewOpen} onClose={() => setViewOpen(false)} title={source.type === 'text' ? 'Pasted text' : source.name} maxWidth={source.dataUrl ? 620 : 480}>
+        <SourceTagsDisplay tags={source.tags} loading={tagsLoading} />
         {source.dataUrl ? (
           source.name?.match(/\.(png|jpg|jpeg|gif|webp)$/i) ? (
             <div className="rounded-[var(--q-radius-md)] overflow-hidden bg-[var(--q-surface-bg)] flex items-center justify-center" style={{ maxHeight: '65vh' }}>

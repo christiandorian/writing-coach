@@ -101,7 +101,7 @@ export default function AuthPage() {
         {/* Title block */}
         <div className="flex flex-col gap-[var(--q-space-8)] items-center text-center w-full">
           <p className="q-h2 text-[var(--q-text-primary)]">
-            Writing Coach by Quizlet
+            Writing by Quizlet
           </p>
           <p className="q-sh2 text-[var(--q-text-secondary)]">
             Write better under pressure

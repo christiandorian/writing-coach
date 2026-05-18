@@ -30,6 +30,7 @@ export interface DimensionFeedback {
   score: number
   diagnosis: string
   suggestion: string
+  highlighted_text?: string
 }
 
 export interface Feedback {

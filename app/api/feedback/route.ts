@@ -14,6 +14,7 @@ Evaluate their response across exactly these 5 dimensions. For each dimension, r
 - score: integer from 1 to 10
 - diagnosis: 2-3 sentences explaining what you observed, referencing specific parts of their response
 - suggestion: one concrete, actionable thing they should do differently next time
+- highlighted_text: a verbatim quote of 10–50 words copied exactly from the user's response that best illustrates this dimension's evaluation — the specific passage your diagnosis refers to
 
 Dimensions:
 1. position_clarity — Is there a clear, unambiguous thesis that directly answers the prompt?
@@ -35,11 +36,11 @@ Return your response as valid JSON only. No preamble, no markdown.
 Schema:
 {
   "dimensions": {
-    "position_clarity": { "score": number, "diagnosis": string, "suggestion": string },
-    "argument_structure": { "score": number, "diagnosis": string, "suggestion": string },
-    "logical_consistency": { "score": number, "diagnosis": string, "suggestion": string },
-    "use_of_evidence": { "score": number, "diagnosis": string, "suggestion": string },
-    "tradeoff_awareness": { "score": number, "diagnosis": string, "suggestion": string }
+    "position_clarity": { "score": number, "diagnosis": string, "suggestion": string, "highlighted_text": string },
+    "argument_structure": { "score": number, "diagnosis": string, "suggestion": string, "highlighted_text": string },
+    "logical_consistency": { "score": number, "diagnosis": string, "suggestion": string, "highlighted_text": string },
+    "use_of_evidence": { "score": number, "diagnosis": string, "suggestion": string, "highlighted_text": string },
+    "tradeoff_awareness": { "score": number, "diagnosis": string, "suggestion": string, "highlighted_text": string }
   },
   "overall_score": number,
   "coach_note": string

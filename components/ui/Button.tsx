@@ -37,7 +37,6 @@ const variantStyles: Record<ButtonVariant, string> = {
     'hover:bg-[var(--q-btn-primary-bg-hover)]',
     'active:bg-[var(--q-twilight-700)]',
     'disabled:bg-[var(--q-btn-primary-bg-disabled)] disabled:text-[var(--q-btn-primary-fg-disabled)]',
-    'shadow-q-sm',
   ].join(' '),
 
   // Secondary — light twilight tint
@@ -78,7 +77,6 @@ const variantStyles: Record<ButtonVariant, string> = {
     'hover:bg-[var(--q-sunset-300)]',
     'active:bg-[var(--q-sunset-200,#FFEDAB)]',
     'disabled:bg-[var(--q-btn-primary-bg-disabled)] disabled:text-[var(--q-btn-primary-fg-disabled)]',
-    'shadow-q-sm',
   ].join(' '),
 
   // Danger — cherry red
@@ -87,7 +85,6 @@ const variantStyles: Record<ButtonVariant, string> = {
     'hover:bg-[var(--q-btn-danger-bg-hover)]',
     'active:bg-[var(--q-cherry-300)]',
     'disabled:bg-[var(--q-btn-primary-bg-disabled)] disabled:text-[var(--q-btn-primary-fg-disabled)]',
-    'shadow-q-sm',
   ].join(' '),
 }
 

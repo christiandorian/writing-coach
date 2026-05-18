@@ -30,7 +30,7 @@ export default function WorkspaceHeader() {
   return (
     <header
       className="flex items-center justify-between px-[var(--q-space-16)] pt-[var(--q-space-20)] pb-[var(--q-space-16)] flex-shrink-0"
-      style={{ position: 'relative', zIndex: 20000 }}
+      style={{ position: 'relative' }}
     >
       {/* Left — menu + logo */}
       <div className="flex items-center gap-[var(--q-space-8)]">

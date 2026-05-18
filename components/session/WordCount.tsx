@@ -5,15 +5,22 @@ import { countWords } from '@/lib/utils'
 interface WordCountProps {
   text: string
   minWords?: number
+  maxWords?: number
 }
 
-export default function WordCount({ text, minWords = 50 }: WordCountProps) {
+export default function WordCount({ text, minWords = 100, maxWords = 500 }: WordCountProps) {
   const count = countWords(text)
-  const ready = count >= minWords
+
+  const colorClass =
+    count >= 400
+      ? 'text-[var(--q-text-success)]'
+      : count >= minWords
+      ? 'text-[var(--q-text-warning)]'
+      : 'text-[var(--q-text-muted)]'
 
   return (
-    <span className={`q-sh4 tabular-nums transition-colors duration-200 ${ready ? 'text-[var(--q-mint-500)]' : 'text-[var(--q-text-muted)]'}`}>
-      {count} / {minWords} words
+    <span className={`q-sh4 tabular-nums transition-colors duration-200 ${colorClass}`}>
+      {count} / {maxWords} words
     </span>
   )
 }

@@ -6,10 +6,13 @@ interface WritingAreaProps {
   value: string
   onChange: (val: string) => void
   disabled?: boolean
+  className?: string
+  fill?: boolean
+  placeholder?: string
 }
 
 const WritingArea = forwardRef<HTMLTextAreaElement, WritingAreaProps>(
-  ({ value, onChange, disabled }, ref) => {
+  ({ value, onChange, disabled, className, fill, placeholder = 'Your response...' }, ref) => {
     return (
       <textarea
         ref={ref}
@@ -20,15 +23,16 @@ const WritingArea = forwardRef<HTMLTextAreaElement, WritingAreaProps>(
         autoCorrect="off"
         autoCapitalize="off"
         spellCheck={false}
-        placeholder="Write your argument here..."
+        placeholder={placeholder}
         className={[
-          'w-full h-[50vh] min-h-[320px] resize-none',
-          'bg-[var(--q-surface-base)] border border-[var(--q-border-primary)]',
-          'rounded-[var(--q-radius-12)] shadow-q-sm',
+          fill ? 'w-full flex-1 min-h-0 resize-none' : 'w-full h-[30vh] min-h-[200px] resize-none',
+          'bg-[var(--q-surface-base)]',
+          'rounded-[var(--q-radius-12)]',
           'text-[var(--q-text-primary)] placeholder-[var(--q-text-muted)]',
-          'p-[var(--q-space-16)] q-b3 leading-relaxed',
-          'focus:outline-none focus:ring-2 focus:ring-[var(--q-twilight-300)] focus:border-transparent',
-          'disabled:opacity-50 disabled:cursor-not-allowed transition-all',
+          'p-[var(--q-space-16)] q-sh3',
+          'focus:outline-none',
+          'disabled:opacity-50 disabled:cursor-not-allowed',
+          className ?? '',
         ].join(' ')}
       />
     )

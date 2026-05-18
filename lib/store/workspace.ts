@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persist, createJSONStorage } from 'zustand/middleware'
 import type { FeedbackResponse, PromptCategory, TimeLimitOption } from '@/lib/types'
 
 export type WorkspaceStep =
@@ -18,6 +19,7 @@ export interface Source {
   fileData?: string   // base64 for binary files — persisted to DB
   type: 'text' | 'pdf'
   selected: boolean
+  tags?: string[]     // AI-generated concept tags (in-memory, not persisted)
 }
 
 interface WorkspaceState {
@@ -35,8 +37,8 @@ interface WorkspaceState {
   startTime: number
   sessionId: string | null
   feedbackV1: FeedbackResponse | null
-  feedbackV2: FeedbackResponse | null
-  rewriteText: string
+  rewriteVersions: { text: string; feedback: FeedbackResponse }[]
+  pendingText: string
   rewriteStartTime: number
   pastSessions: PastSession[]
 
@@ -48,14 +50,15 @@ interface WorkspaceState {
   addSource: (source: Omit<Source, 'id' | 'selected'>) => string
   toggleSource: (id: string) => void
   removeSource: (id: string) => void
+  setSourceTags: (id: string, tags: string[]) => void
   startActivity: (prompt: string, category: PromptCategory, timeLimitMinutes: TimeLimitOption) => void
   lockPosition: (position: string) => void
   setResponse: (text: string) => void
   setStep: (step: WorkspaceStep) => void
   setSessionId: (id: string) => void
   setFeedbackV1: (f: FeedbackResponse) => void
-  setFeedbackV2: (f: FeedbackResponse) => void
-  setRewriteText: (text: string) => void
+  setPendingText: (text: string) => void
+  submitRewriteVersion: (text: string, feedback: FeedbackResponse) => void
   startRewrite: () => void
   addPastSession: (session: PastSession) => void
   setPastSessions: (sessions: PastSession[]) => void
@@ -87,12 +90,14 @@ const sessionDefaults = {
   startTime: 0,
   sessionId: null,
   feedbackV1: null,
-  feedbackV2: null,
-  rewriteText: '',
+  rewriteVersions: [] as { text: string; feedback: FeedbackResponse }[],
+  pendingText: '',
   rewriteStartTime: 0,
 }
 
-export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
+export const useWorkspaceStore = create<WorkspaceState>()(
+  persist(
+    (set, get) => ({
   rightTab: 'study',
   sources: [],
   pastSessions: [],
@@ -122,18 +127,24 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   removeSource: (id) =>
     set((s) => ({ sources: s.sources.filter((src) => src.id !== id) })),
 
+  setSourceTags: (id, tags) =>
+    set((s) => ({
+      sources: s.sources.map((src) => src.id === id ? { ...src, tags } : src),
+    })),
+
   startActivity: (prompt, category, timeLimitMinutes) =>
     set({
       prompt,
       category,
       timeLimitSeconds: timeLimitMinutes * 60,
-      step: 'setup',
+      step: 'writing',
       position: '',
       responseText: '',
       feedbackV1: null,
-      feedbackV2: null,
-      rewriteText: '',
+      rewriteVersions: [],
+      pendingText: '',
       sessionId: null,
+      startTime: Date.now(),
     }),
 
   lockPosition: (position) =>
@@ -143,9 +154,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   setStep: (step) => set({ step }),
   setSessionId: (id) => set({ sessionId: id }),
   setFeedbackV1: (f) => set({ feedbackV1: f }),
-  setFeedbackV2: (f) => set({ feedbackV2: f }),
-  setRewriteText: (text) => set({ rewriteText: text }),
-  startRewrite: () => set({ rewriteStartTime: Date.now() }),
+  setPendingText: (text) => set({ pendingText: text }),
+  submitRewriteVersion: (text, feedback) =>
+    set((s) => ({ rewriteVersions: [...s.rewriteVersions, { text, feedback }], pendingText: '' })),
+  startRewrite: () => set({ rewriteStartTime: Date.now(), pendingText: '' }),
 
   addPastSession: (session) =>
     set((s) => ({ pastSessions: [session, ...s.pastSessions] })),
@@ -156,4 +168,30 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     set((s) => ({ chatMessages: [...s.chatMessages, msg] })),
 
   resetSession: () => set(sessionDefaults),
-}))
+    }),
+    {
+      name: 'writing-coach-workspace',
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
+        rightTab: state.rightTab,
+        // Strip dataUrl (invalid after refresh) and tags (in-memory only)
+        sources: state.sources.map(({ dataUrl: _d, tags: _t, ...rest }) => rest),
+        pastSessions: state.pastSessions,
+        chatMessages: state.chatMessages,
+        // If the user refreshes mid-submit, drop back to writing so they can re-submit
+        step: state.step === 'submitting' ? 'writing' : state.step,
+        prompt: state.prompt,
+        category: state.category,
+        position: state.position,
+        responseText: state.responseText,
+        timeLimitSeconds: state.timeLimitSeconds,
+        startTime: state.startTime,
+        sessionId: state.sessionId,
+        feedbackV1: state.feedbackV1,
+        rewriteVersions: state.rewriteVersions,
+        pendingText: state.pendingText,
+        rewriteStartTime: state.rewriteStartTime,
+      }),
+    }
+  )
+)

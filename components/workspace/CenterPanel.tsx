@@ -238,14 +238,12 @@ function IdleState() {
                 {selectedSources.length === 0 && (
                   <motion.div
                     key="no-source-notice"
-                    initial={{ height: 0, opacity: 0, marginBottom: 0 }}
-                    animate={{ height: 'auto', opacity: 1, marginBottom: 0 }}
-                    exit={{ height: 0, opacity: 0, marginBottom: 0 }}
-                    transition={{ duration: 0.22, ease: [0.30, 0.00, 0.44, 1.00] }}
-                    className="overflow-hidden"
+                    initial={{ opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.25, ease: [0.25, 0.46, 0.45, 0.94] }}
                   >
-                    <div className="flex items-center gap-[var(--q-space-12)] px-[var(--q-space-16)] py-[var(--q-space-12)] rounded-[var(--q-radius-md)] bg-[var(--q-cherry-50,#fff5f5)] border border-[var(--q-cherry-200,#fecaca)]">
-                      <span className="material-symbols-rounded text-[var(--q-cherry-500)] shrink-0" style={{ fontSize: 20 }}>warning</span>
+                    <div className="flex items-center justify-center px-[var(--q-space-16)] py-[var(--q-space-12)] rounded-[var(--q-radius-md)] bg-[var(--q-cherry-50,#fff5f5)]">
                       <p className="q-sh4 text-[var(--q-cherry-500)]">Select a source to start writing</p>
                     </div>
                   </motion.div>
@@ -473,55 +471,53 @@ function PromptWritingState() {
       ].join(' ')}>
 
         {/* Prompt card — collapsible, hidden when expanded */}
-        {!isExpanded && <div className={[
-          'bg-[var(--q-surface-bg)] rounded-[var(--q-radius-xl)] flex-shrink-0',
-          promptOpen
-            ? 'flex flex-col pt-[var(--q-space-16)] pb-[var(--q-space-24)] px-[var(--q-space-24)] gap-[var(--q-space-4)]'
-            : 'flex items-center py-[var(--q-space-16)] px-[var(--q-space-24)] gap-[var(--q-space-16)]',
-        ].join(' ')}>
-
-          {promptOpen ? (
-            <>
-              {/* Expanded row 1: pill + button */}
-              <div className="flex items-center justify-between">
-                <span className="inline-flex items-center flex-shrink-0 q-sh5 text-[var(--q-surface-base)] bg-[var(--q-text-primary)] px-[var(--q-space-12)] py-[var(--q-space-4)] rounded-[var(--q-radius-full)]">
-                  Prompt
-                </span>
-                <Button variant="text-secondary" circle size="medium" onClick={() => setPromptOpen(false)}>
-                  <span className="material-symbols-rounded" style={{ fontSize: 20 }}>expand_less</span>
-                </Button>
-              </div>
-
-              {/* Expanded row 2: prompt text */}
-              <motion.div
-                key="prompt-content"
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.2, ease: [0.30, 0.00, 0.44, 1.00] }}
-                className="overflow-hidden"
-              >
-                <p className="q-sh2 text-[var(--q-text-primary)]">{prompt}</p>
-              </motion.div>
-            </>
-          ) : (
-            <>
-              {/* Collapsed: pill + truncated preview + button */}
+        {!isExpanded && (
+          <div className="bg-[var(--q-surface-bg)] rounded-[var(--q-radius-xl)] flex-shrink-0">
+            {/* Header — always at the same position, never moves */}
+            <div className="flex items-center gap-[var(--q-space-8)] px-[var(--q-space-24)] py-[var(--q-space-16)] justify-between">
               <div className="flex items-center gap-[var(--q-space-8)] min-w-0 flex-1">
                 <span className="inline-flex items-center flex-shrink-0 q-sh5 text-[var(--q-surface-base)] bg-[var(--q-text-primary)] px-[var(--q-space-12)] py-[var(--q-space-4)] rounded-[var(--q-radius-full)]">
                   Prompt
                 </span>
-                <p className="q-sh3 text-[var(--q-text-secondary)] truncate min-w-0 flex-1">
-                  {prompt}
-                </p>
+                <AnimatePresence mode="popLayout">
+                  {!promptOpen && (
+                    <motion.p
+                      key="preview"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.15 }}
+                      className="q-sh3 text-[var(--q-text-secondary)] truncate min-w-0 flex-1"
+                    >
+                      {prompt}
+                    </motion.p>
+                  )}
+                </AnimatePresence>
               </div>
-              <Button variant="text-secondary" circle size="medium" onClick={() => setPromptOpen(true)}>
-                <span className="material-symbols-rounded" style={{ fontSize: 20 }}>expand_more</span>
+              <Button variant="text-secondary" circle size="medium" onClick={() => setPromptOpen(v => !v)}>
+                <span className="material-symbols-rounded" style={{ fontSize: 20 }}>
+                  {promptOpen ? 'expand_less' : 'expand_more'}
+                </span>
               </Button>
-            </>
-          )}
+            </div>
 
-        </div>}
+            {/* Body — only this section animates height */}
+            <AnimatePresence initial={false}>
+              {promptOpen && (
+                <motion.div
+                  key="prompt-body"
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.28, ease: [0.25, 0.46, 0.45, 0.94] }}
+                  className="overflow-hidden"
+                >
+                  <p className="q-sh2 text-[var(--q-text-primary)] px-[var(--q-space-24)] pb-[var(--q-space-24)]">{prompt}</p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
 
         {/* Textarea with absolute controls, scratch pad toggle, expand toggle */}
         <div className={[
@@ -705,19 +701,19 @@ function SubmittingState() {
 
 /* ── Feedback helpers ─────────────────────────────────────────────────────── */
 
-interface DimColors { bg: string; activeBg: string; border: string; text: string }
+interface DimColors { bg: string; activeBg: string; border: string; text: string; highlight: string; activeHighlight: string }
 
 /** Score-based semantic colors. displayScore is out of 20. */
 function getDimensionColors(displayScore: number): DimColors {
   if (displayScore >= 18) {
-    // A — success (mint/green)
-    return { bg: 'var(--q-mint-100)', activeBg: 'var(--q-mint-200)', border: 'var(--q-mint-600)', text: 'var(--q-mint-700)' }
+    // A — success
+    return { bg: 'var(--q-mint-100)', activeBg: 'var(--q-mint-200)', border: 'var(--q-border-success)', text: 'var(--q-text-success)', highlight: 'var(--q-mint-200)', activeHighlight: 'var(--q-mint-300)' }
   } else if (displayScore >= 14) {
-    // B–C — warning (sunset/amber)
-    return { bg: 'var(--q-sunset-100)', activeBg: 'var(--q-sunset-200)', border: 'var(--q-sunset-500)', text: 'var(--q-sunset-700)' }
+    // B–C — warning
+    return { bg: 'var(--q-sunset-100)', activeBg: 'var(--q-sunset-200)', border: 'var(--q-border-warning)', text: 'var(--q-text-warning)', highlight: 'var(--q-sherbert-200)', activeHighlight: 'var(--q-sherbert-300)' }
   } else {
-    // D or below — error (cherry/red)
-    return { bg: 'var(--q-cherry-100)', activeBg: 'var(--q-cherry-200)', border: 'var(--q-cherry-500)', text: 'var(--q-cherry-700)' }
+    // D or below — error
+    return { bg: 'var(--q-cherry-100)', activeBg: 'var(--q-cherry-200)', border: 'var(--q-border-error)', text: 'var(--q-text-error)', highlight: 'var(--q-cherry-100)', activeHighlight: 'var(--q-cherry-200)' }
   }
 }
 
@@ -822,7 +818,7 @@ function FeedbackState() {
     const next = key === activeDimension ? null : key
     setActiveDimension(next)
     if (next) {
-      setOpenDimensions(prev => new Set([...prev, next]))
+      setOpenDimensions(prev => new Set(Array.from(prev).concat(next)))
       setTimeout(() => cardRefs.current[next]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 0)
     }
   }
@@ -900,7 +896,7 @@ function FeedbackState() {
                               const colors = getDimensionColors(dimScore)
                               const isActive = activeDimension === seg.key
                               return (
-                                <mark key={si} ref={el => { highlightRefs.current[seg.key!] = el }} onClick={() => handleHighlightClick(seg.key!)} className="cursor-pointer transition-colors rounded-sm" style={{ backgroundColor: isActive ? colors.activeBg : colors.bg, borderBottom: `2px solid ${colors.border}`, padding: '1px 0' }}>
+                                <mark key={si} ref={el => { highlightRefs.current[seg.key!] = el }} onClick={() => handleHighlightClick(seg.key!)} className="cursor-pointer transition-colors rounded-sm" style={{ backgroundColor: isActive ? colors.activeHighlight : colors.highlight }}>
                                   {seg.text}
                                 </mark>
                               )

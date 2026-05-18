@@ -75,14 +75,19 @@
   --q-twilight-700: #1F1C8B;
 
   --q-mint-100:     #E6FCF4;
+  --q-mint-200:     #C2F5E5;
+  --q-mint-300:     #8EEECE;
   --q-mint-400:     #59E8B5;
   --q-mint-500:     #18AE79;
   --q-mint-600:     #12815A;
 
+  --q-cherry-100:   #FFEAEA;
+  --q-cherry-200:   #FFCECE;
   --q-cherry-300:   #FF7873;
   --q-cherry-400:   #DA4543;
   --q-cherry-500:   #B00020;
 
+  --q-sherbert-200: #FFE0C4;
   --q-sherbert-300: #FFC38C;
   --q-sherbert-400: #FF983A;
   --q-sherbert-500: #CC4E00;

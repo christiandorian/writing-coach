@@ -840,7 +840,7 @@ function FeedbackState() {
   const toggleDimension = (key: string) => {
     const willOpen = !openDimensions.has(key)
     setOpenDimensions(prev => {
-      const next = new Set(prev)
+      const next = new Set(Array.from(prev))
       if (next.has(key)) next.delete(key)
       else next.add(key)
       return next

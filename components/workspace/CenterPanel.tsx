@@ -710,7 +710,7 @@ function getDimensionColors(displayScore: number): DimColors {
     return { bg: 'var(--q-mint-100)', activeBg: 'var(--q-mint-200)', border: 'var(--q-border-success)', text: 'var(--q-text-success)', highlight: 'var(--q-mint-100)', activeHighlight: 'var(--q-mint-300)' }
   } else {
     // Below A — warning (sherbert for all non-success scores)
-    return { bg: 'var(--q-sunset-100)', activeBg: 'var(--q-sunset-200)', border: 'var(--q-border-warning)', text: 'var(--q-text-warning)', highlight: 'var(--q-sherbert-200)', activeHighlight: 'var(--q-sherbert-300)' }
+    return { bg: 'var(--q-sunset-100)', activeBg: 'var(--q-sunset-200)', border: 'var(--q-border-warning)', text: 'var(--q-text-warning)', highlight: 'var(--q-sherbert-100)', activeHighlight: 'var(--q-sherbert-300)' }
   }
 }
 

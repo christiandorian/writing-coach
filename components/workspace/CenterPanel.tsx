@@ -699,18 +699,54 @@ function SubmittingState() {
   )
 }
 
+/* ── Comparison chart ─────────────────────────────────────────────────────── */
+
+function ComparisonChart({ versions }: { versions: Array<{ feedback: { dimensions?: unknown } | null }> }) {
+  const scores = versions.map((v, i) => ({ n: i + 1, score: computeTotalScore(v.feedback?.dimensions as Parameters<typeof computeTotalScore>[0]) }))
+  const svgW = 480, svgH = 280
+  const pl = 52, pr = 24, pt = 36, pb = 48
+  const chartW = svgW - pl - pr
+  const chartH = svgH - pt - pb
+  const N = scores.length
+  const getX = (i: number) => pl + (N === 1 ? chartW / 2 : i * chartW / (N - 1))
+  const getY = (s: number) => pt + chartH - (s / 100) * chartH
+  const pathD = scores.map((s, i) => `${i === 0 ? 'M' : 'L'} ${getX(i).toFixed(1)} ${getY(s.score).toFixed(1)}`).join(' ')
+  const yTicks = [0, 25, 50, 75, 100]
+  return (
+    <svg width={svgW} height={svgH} viewBox={`0 0 ${svgW} ${svgH}`} style={{ overflow: 'visible', maxWidth: '100%' }}>
+      {/* Y grid + labels */}
+      {yTicks.map(y => (
+        <g key={y}>
+          <line x1={pl} y1={getY(y)} x2={svgW - pr} y2={getY(y)} stroke="var(--q-border-primary)" strokeWidth="1" />
+          <text x={pl - 8} y={getY(y) + 4} textAnchor="end" fontSize="11" fill="var(--q-text-muted)">{y}</text>
+        </g>
+      ))}
+      {/* Connecting line */}
+      {N > 1 && <path d={pathD} stroke="var(--q-twilight-400)" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />}
+      {/* Points + labels */}
+      {scores.map((s, i) => (
+        <g key={i}>
+          <circle cx={getX(i)} cy={getY(s.score)} r="7" fill="var(--q-twilight-500)" />
+          <text x={getX(i)} y={getY(s.score) - 14} textAnchor="middle" fontSize="13" fontWeight="600" fill="var(--q-text-primary)">{s.score}</text>
+          <text x={getX(i)} y={svgH - pb + 20} textAnchor="middle" fontSize="12" fill="var(--q-text-secondary)">Response {s.n}</text>
+        </g>
+      ))}
+    </svg>
+  )
+}
+
 /* ── Feedback helpers ─────────────────────────────────────────────────────── */
 
-interface DimColors { bg: string; activeBg: string; border: string; text: string; highlight: string; activeHighlight: string }
+interface DimColors { bg: string; activeBg: string; border: string; text: string; highlight: string; hoverHighlight: string; activeHighlight: string }
 
 /** Score-based semantic colors. displayScore is out of 20. */
 function getDimensionColors(displayScore: number): DimColors {
   if (displayScore >= 18) {
     // A — success
-    return { bg: 'var(--q-mint-100)', activeBg: 'var(--q-mint-200)', border: 'var(--q-border-success)', text: 'var(--q-text-success)', highlight: 'var(--q-mint-100)', activeHighlight: 'var(--q-mint-300)' }
+    return { bg: 'var(--q-mint-100)', activeBg: 'var(--q-mint-200)', border: 'var(--q-border-success)', text: 'var(--q-text-success)', highlight: 'var(--q-mint-100)', hoverHighlight: 'var(--q-mint-200)', activeHighlight: 'var(--q-mint-300)' }
   } else {
     // Below A — warning (sherbert for all non-success scores)
-    return { bg: 'var(--q-sunset-100)', activeBg: 'var(--q-sunset-200)', border: 'var(--q-border-warning)', text: 'var(--q-text-warning)', highlight: 'var(--q-sherbert-100)', activeHighlight: 'var(--q-sherbert-300)' }
+    return { bg: 'var(--q-sunset-100)', activeBg: 'var(--q-sunset-200)', border: 'var(--q-border-warning)', text: 'var(--q-text-warning)', highlight: 'var(--q-sherbert-100)', hoverHighlight: 'var(--q-sherbert-200)', activeHighlight: 'var(--q-sherbert-300)' }
   }
 }
 
@@ -746,14 +782,12 @@ function FeedbackState() {
   const { feedbackV1, rewriteVersions, pendingText, setPendingText, submitRewriteVersion, responseText, timeLimitSeconds, prompt, position, sessionId, startRewrite, resetSession, pastSessions } = useWorkspaceStore()
   const supabase = createClient()
   const [activeDimension, setActiveDimension] = useState<string | null>(null)
-  const [showRewrite, setShowRewrite] = useState(false)
+  const [activeTab, setActiveTab] = useState<'comparison' | 'writing' | number>(1)
   const [isSubmittingRewrite, setIsSubmittingRewrite] = useState(false)
   const [showRewriteConfirm, setShowRewriteConfirm] = useState(false)
   const [promptOpen, setPromptOpen] = useState(false)
-  const [openVersion, setOpenVersion] = useState(1)   // which left-col accordion is open (0 = none)
   const [overallOpen, setOverallOpen] = useState(true)
   const [openDimensions, setOpenDimensions] = useState<Set<string>>(new Set())
-  const [activeVersion, setActiveVersion] = useState(1)  // 1-indexed; matches right-col tab
   const highlightRefs = useRef<Record<string, HTMLElement | null>>({})
   const cardRefs = useRef<Record<string, HTMLElement | null>>({})
   const [isPendingScratchPad, setIsPendingScratchPad] = useState(false)
@@ -771,35 +805,31 @@ function FeedbackState() {
     { text: responseText, feedback: feedbackV1 },
     ...rewriteVersions.filter(v => v.text?.trim() && v.feedback?.dimensions),
   ]
-  const pendingVersionNum = showRewrite ? allVersions.length + 1 : null
-  const hasMultipleVersions = allVersions.length > 1 || showRewrite
+  const showTabs = allVersions.length > 1 || activeTab === 'writing'
+  const activeResponseNum = typeof activeTab === 'number' ? activeTab : 1
 
-  // What the right column shows — null when pending
-  const displayedFeedback = allVersions[activeVersion - 1]?.feedback ?? feedbackV1
-  const versionPending = activeVersion > allVersions.length  // selected tab has no feedback yet
-  const totalScore = versionPending ? 0 : computeTotalScore(displayedFeedback.dimensions)
+  // Right column shows feedback for the active response tab
+  const displayedFeedback = allVersions[activeResponseNum - 1]?.feedback ?? feedbackV1
+  const versionPending = false
+  const totalScore = computeTotalScore(displayedFeedback?.dimensions)
 
-  const annotations = DIMENSIONS.map(d => ({ key: d.key, quote: feedbackV1.dimensions?.[d.key]?.highlighted_text }))
-  const segments = annotateEssay(responseText, annotations)
-
-  const selectVersion = (v: number) => {
-    setActiveVersion(v)
-    setOpenVersion(v)
+  // Per-version annotated segments
+  const getVersionSegments = (v: { text: string; feedback: { dimensions?: unknown } | null }) => {
+    const dims = v.feedback?.dimensions as Record<string, { highlighted_text?: string }> | undefined
+    if (!dims) return [{ text: v.text, key: null as string | null }]
+    const anns = DIMENSIONS.map(d => ({ key: d.key, quote: dims[d.key]?.highlighted_text }))
+    return annotateEssay(v.text, anns)
   }
 
   const handleStartRewrite = () => {
     startRewrite()
-    setShowRewrite(true)
     setPromptOpen(false)
-    const pendingV = allVersions.length + 1
-    setOpenVersion(pendingV)
-    setActiveVersion(pendingV)
+    setActiveTab('writing')
   }
 
   const handleRewriteSubmit = async () => {
     setIsSubmittingRewrite(true)
     try {
-      // Only persist to sessions.response_v2 for the first rewrite
       if (sessionId && rewriteVersions.length === 0) {
         await supabase.from('sessions').update({ response_v2: pendingText }).eq('id', sessionId)
       }
@@ -811,9 +841,7 @@ function FeedbackState() {
       })
       const feedback = await res.json() as FeedbackResponse
       submitRewriteVersion(pendingText, feedback)
-      setShowRewrite(false)
-      setOpenVersion(versionNum)
-      setActiveVersion(versionNum)
+      setActiveTab(versionNum)
     } catch (err) { console.error(err) }
     finally { setIsSubmittingRewrite(false) }
   }
@@ -851,204 +879,177 @@ function FeedbackState() {
     }
   }
 
-  return panel(
-    <div className="flex flex-col h-full bg-[var(--q-surface-bg)]">
+  const tabCls = (tab: 'comparison' | 'writing' | number) => [
+    'q-sh5 px-[var(--q-space-12)] py-[var(--q-space-6)] rounded-[var(--q-radius-full)] transition-all whitespace-nowrap flex-shrink-0',
+    activeTab === tab
+      ? 'bg-[var(--q-twilight-100)] text-[var(--q-twilight-600)]'
+      : 'text-[var(--q-text-muted)] hover:text-[var(--q-text-secondary)] hover:bg-[var(--q-surface-bg)] cursor-pointer',
+  ].join(' ')
 
-      {/* Body: 2-column layout */}
-      <div className="flex-1 overflow-hidden flex">
-
-        {/* Left: Prompt + version accordions */}
-        <div className="flex-1 min-w-0 overflow-y-auto bg-[var(--q-surface-base)] px-[var(--q-space-24)] py-[var(--q-space-24)] flex flex-col gap-[var(--q-space-12)]">
-
-          {/* Prompt accordion */}
-          <div className="rounded-[var(--q-radius-xl)] bg-[var(--q-surface-bg)] overflow-hidden flex-shrink-0">
-            {/* Header — always static, never moves */}
-            <div
-              className="flex items-center gap-[var(--q-space-8)] px-[var(--q-space-24)] py-[var(--q-space-16)] justify-between cursor-pointer"
-              onClick={() => setPromptOpen(o => !o)}
-            >
-              <div className="flex items-center gap-[var(--q-space-8)] min-w-0 flex-1">
-                <span className="inline-flex items-center flex-shrink-0 q-sh5 text-[var(--q-surface-base)] bg-[var(--q-text-primary)] px-[var(--q-space-12)] py-[var(--q-space-4)] rounded-[var(--q-radius-full)]">
-                  Prompt
-                </span>
-                <AnimatePresence mode="popLayout">
-                  {!promptOpen && (
-                    <motion.p
-                      key="preview"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.15 }}
-                      className="q-sh3 text-[var(--q-text-secondary)] truncate min-w-0 flex-1"
-                    >
-                      {prompt}
-                    </motion.p>
-                  )}
-                </AnimatePresence>
-              </div>
-              <Button variant="text-secondary" circle size="medium" tabIndex={-1}>
-                <span className="material-symbols-rounded" style={{ fontSize: 20 }}>
-                  {promptOpen ? 'expand_less' : 'expand_more'}
-                </span>
-              </Button>
-            </div>
-            <AnimatePresence initial={false}>
-              {promptOpen && (
-                <motion.div key="prompt-body" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.28, ease: [0.25, 0.46, 0.45, 0.94] }} className="overflow-hidden">
-                  <p className="q-sh3 text-[var(--q-text-primary)] leading-relaxed px-[var(--q-space-24)] pb-[var(--q-space-24)]">{prompt}</p>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-
-          {/* Submitted version accordions (V1, V2, V3 ...) */}
-          {allVersions.map((v, i) => {
-            const vNum = i + 1
-            const isOpen = openVersion === vNum
-            const label = hasMultipleVersions ? `Version ${vNum}` : 'Your response'
-            return (
-              <div key={vNum} className="rounded-[var(--q-radius-xl)] bg-[var(--q-surface-bg)] overflow-hidden flex-shrink-0">
-                <button
-                  className="w-full px-[var(--q-space-20)] py-[var(--q-space-16)] flex items-center justify-between"
-                  onClick={() => { const next = isOpen ? 0 : vNum; setOpenVersion(next); if (next) setActiveVersion(next) }}
-                >
-                  <span className="q-sh4 text-[var(--q-text-secondary)]">{label}</span>
-                  <span className="material-symbols-rounded text-[var(--q-text-muted)]" style={{ fontSize: 20 }}>
-                    {isOpen ? 'expand_less' : 'expand_more'}
-                  </span>
-                </button>
-                <AnimatePresence initial={false}>
-                  {isOpen && (
-                    <motion.div key={`v${vNum}-body`} initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2, ease: [0.30, 0.00, 0.44, 1.00] }} className="overflow-hidden">
-                      <div className="px-[var(--q-space-20)] pb-[var(--q-space-20)] max-h-[60vh] overflow-y-auto">
-                        {vNum === 1 ? (
-                          <p className="q-sh3 text-[var(--q-text-primary)] leading-relaxed whitespace-pre-wrap">
-                            {segments.map((seg, si) => {
-                              if (!seg.key) return <span key={si}>{seg.text}</span>
-                              const dimScore = toDisplayScore(feedbackV1.dimensions?.[seg.key as keyof typeof feedbackV1.dimensions]?.score ?? 0)
-                              const colors = getDimensionColors(dimScore)
-                              const isActive = activeDimension === seg.key
-                              return (
-                                <mark key={si} ref={el => { highlightRefs.current[seg.key!] = el }} onClick={() => handleHighlightClick(seg.key!)} className="cursor-pointer transition-colors rounded-sm" style={{ backgroundColor: isActive ? colors.activeHighlight : colors.highlight }}>
-                                  {seg.text}
-                                </mark>
-                              )
-                            })}
-                          </p>
-                        ) : (
-                          <p className="q-sh3 text-[var(--q-text-primary)] leading-relaxed whitespace-pre-wrap">{v.text}</p>
-                        )}
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            )
-          })}
-
-          {/* Pending rewrite accordion */}
-          <AnimatePresence initial={false}>
-            {showRewrite && pendingVersionNum && (
-              <motion.div key="pending-accordion" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.22, ease: [0.30, 0.00, 0.44, 1.00] }} className="overflow-hidden rounded-[var(--q-radius-xl)]">
-                <div className="bg-[var(--q-surface-bg)] overflow-hidden rounded-[var(--q-radius-xl)]">
-                  <button
-                    className="w-full px-[var(--q-space-20)] py-[var(--q-space-16)] flex items-center justify-between"
-                    onClick={() => { const next = openVersion === pendingVersionNum ? 0 : pendingVersionNum!; setOpenVersion(next); if (next) setActiveVersion(next) }}
-                  >
-                    <span className="q-sh4 text-[var(--q-text-secondary)]">Version {pendingVersionNum}</span>
-                    <span className="material-symbols-rounded text-[var(--q-text-muted)]" style={{ fontSize: 20 }}>
-                      {openVersion === pendingVersionNum ? 'expand_less' : 'expand_more'}
-                    </span>
-                  </button>
-                  <AnimatePresence initial={false}>
-                    {openVersion === pendingVersionNum && (
-                      <motion.div key="pending-body" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2, ease: [0.30, 0.00, 0.44, 1.00] }} className="overflow-hidden">
-                        <div className="px-[var(--q-space-20)] pb-[var(--q-space-16)]">
-                          <div className={[
-                            'bg-[var(--q-surface-base)] border-2 border-[var(--q-twilight-300)] rounded-[var(--q-radius-xl)] overflow-hidden flex flex-col relative',
-                          ].join(' ')}>
-                            {/* Overlay buttons */}
-                            <div className="absolute top-[var(--q-space-8)] right-[var(--q-space-12)] flex items-center gap-[var(--q-space-8)] z-10">
-                              <Button variant="text-secondary" circle size="medium" onClick={() => setIsPendingScratchPad(v => !v)} title="Scratch pad">
-                                <span className="material-symbols-rounded" style={{ fontSize: 20, color: isPendingScratchPad ? 'var(--q-text-highlight)' : undefined }}>edit_note</span>
-                              </Button>
-                              <Button variant="text-secondary" circle size="medium" onClick={() => setIsPendingExpanded(v => !v)} title="Expand">
-                                <span className="material-symbols-rounded" style={{ fontSize: 20 }}>{isPendingExpanded ? 'collapse_content' : 'expand_content'}</span>
-                              </Button>
-                            </div>
-
-                            {/* Content area */}
-                            {isPendingScratchPad ? (
-                              pendingScratchPadTemplate === 'custom' ? (
-                                <WritingArea value={pendingScratchPadText} onChange={setPendingScratchPadText} className={isPendingExpanded ? 'border-0 focus:ring-0 rounded-none pr-[104px]' : 'border-0 focus:ring-0 rounded-none pr-[104px] h-[38vh] min-h-[200px]'} fill={isPendingExpanded} placeholder="Your position, why, supporting examples, etc." />
-                              ) : (
-                                <div className={['overflow-y-auto px-[var(--q-space-16)] pt-[var(--q-space-16)] pb-[var(--q-space-4)] flex flex-col gap-[var(--q-space-16)]', isPendingExpanded ? 'flex-1 min-h-0' : 'h-[38vh] min-h-[200px]'].join(' ')}
-                                  style={{ maskImage: 'linear-gradient(to bottom, transparent 0, black 20px, black calc(100% - 20px), transparent 100%)', WebkitMaskImage: 'linear-gradient(to bottom, transparent 0, black 20px, black calc(100% - 20px), transparent 100%)' }}>
-                                  {pendingScratchPadTemplate === 'outline' ? (
-                                    <>
-                                      <ScratchField label="What is the question?" value={pendingOutlineData.question} onChange={v => setPendingOutlineData(d => ({ ...d, question: v }))} />
-                                      <ScratchField label="What position will I take?" value={pendingOutlineData.position} onChange={v => setPendingOutlineData(d => ({ ...d, position: v }))} />
-                                      <div className="flex flex-col gap-[var(--q-space-8)]">
-                                        <p className="q-sh4 text-[var(--q-text-secondary)]">Why?</p>
-                                        <NumberedField number={1} value={pendingOutlineData.why1} onChange={v => setPendingOutlineData(d => ({ ...d, why1: v }))} />
-                                        <NumberedField number={2} value={pendingOutlineData.why2} onChange={v => setPendingOutlineData(d => ({ ...d, why2: v }))} />
-                                        <NumberedField number={3} value={pendingOutlineData.why3} onChange={v => setPendingOutlineData(d => ({ ...d, why3: v }))} />
-                                      </div>
-                                      <ScratchField label="Best example:" value={pendingOutlineData.example} onChange={v => setPendingOutlineData(d => ({ ...d, example: v }))} />
-                                      <ScratchField label="Final takeaway:" value={pendingOutlineData.takeaway} onChange={v => setPendingOutlineData(d => ({ ...d, takeaway: v }))} />
-                                    </>
-                                  ) : (
-                                    <>
-                                      <ScratchField label="Position:" value={pendingThoughtFlowData.position} onChange={v => setPendingThoughtFlowData(d => ({ ...d, position: v }))} />
-                                      <ScratchField label="Reason 1:" value={pendingThoughtFlowData.reason1} onChange={v => setPendingThoughtFlowData(d => ({ ...d, reason1: v }))} />
-                                      <ScratchField label="Reason 2:" value={pendingThoughtFlowData.reason2} onChange={v => setPendingThoughtFlowData(d => ({ ...d, reason2: v }))} />
-                                      <ScratchField label="Example(s):" value={pendingThoughtFlowData.examples} onChange={v => setPendingThoughtFlowData(d => ({ ...d, examples: v }))} />
-                                      <ScratchField label="Conclusion:" value={pendingThoughtFlowData.conclusion} onChange={v => setPendingThoughtFlowData(d => ({ ...d, conclusion: v }))} />
-                                    </>
-                                  )}
-                                </div>
-                              )
-                            ) : (
-                              <WritingArea value={pendingText} onChange={setPendingText} className={isPendingExpanded ? 'border-0 focus:ring-0 rounded-none pr-[104px]' : 'border-0 focus:ring-0 rounded-none pr-[104px] h-[38vh] min-h-[200px]'} fill={isPendingExpanded} placeholder="Your response..." />
-                            )}
-
-                            {/* Footer */}
-                            <div className="px-[var(--q-space-16)] py-[var(--q-space-12)] flex items-center justify-between flex-shrink-0">
-                              {isPendingScratchPad ? (
-                                <div className="relative">
-                                  {pendingTemplateMenuOpen && <div className="fixed inset-0 z-[5]" onClick={() => setPendingTemplateMenuOpen(false)} />}
-                                  {pendingTemplateMenuOpen && (
-                                    <div className="absolute bottom-full mb-2 left-0 z-10 bg-[var(--q-surface-base)] border border-[var(--q-border-primary)] rounded-[var(--q-radius-xl)] shadow-lg overflow-hidden min-w-[160px]">
-                                      {SCRATCH_PAD_TEMPLATES.map(t => (
-                                        <button key={t.id} onClick={() => { setPendingScratchPadTemplate(t.id); setPendingTemplateMenuOpen(false) }} className="w-full flex items-center justify-between px-[var(--q-space-16)] py-[var(--q-space-10)] q-sh4 hover:bg-[var(--q-surface-bg)] transition-colors">
-                                          <span style={{ color: pendingScratchPadTemplate === t.id ? 'var(--q-text-highlight)' : 'var(--q-text-primary)' }}>{t.label}</span>
-                                          {pendingScratchPadTemplate === t.id && <span className="material-symbols-rounded" style={{ fontSize: 18, color: 'var(--q-text-highlight)' }}>check_circle</span>}
-                                        </button>
-                                      ))}
-                                    </div>
-                                  )}
-                                  <button onClick={() => setPendingTemplateMenuOpen(v => !v)} className="flex items-center gap-[var(--q-space-4)] q-sh4 text-[var(--q-text-secondary)] hover:text-[var(--q-text-primary)] transition-colors">
-                                    <span>{SCRATCH_PAD_TEMPLATES.find(t => t.id === pendingScratchPadTemplate)?.label}</span>
-                                    <span className="material-symbols-rounded" style={{ fontSize: 16 }}>{pendingTemplateMenuOpen ? 'expand_less' : 'expand_more'}</span>
-                                  </button>
-                                </div>
-                              ) : (
-                                <WordCount text={pendingText} />
-                              )}
-                              <CountdownTimer totalSeconds={timeLimitSeconds} onExpire={handleRewriteSubmit} />
-                            </div>
-                          </div>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-              </motion.div>
+  // Shared prompt accordion used in both response and writing views
+  const PromptCard = (
+    <div className="rounded-[var(--q-radius-xl)] bg-[var(--q-surface-bg)] overflow-hidden flex-shrink-0">
+      <div className="flex items-center gap-[var(--q-space-8)] px-[var(--q-space-24)] py-[var(--q-space-16)] justify-between cursor-pointer" onClick={() => setPromptOpen(o => !o)}>
+        <div className="flex items-center gap-[var(--q-space-8)] min-w-0 flex-1">
+          <span className="inline-flex items-center flex-shrink-0 q-sh5 text-[var(--q-surface-base)] bg-[var(--q-text-primary)] px-[var(--q-space-12)] py-[var(--q-space-4)] rounded-[var(--q-radius-full)]">Prompt</span>
+          <AnimatePresence mode="popLayout">
+            {!promptOpen && (
+              <motion.p key="preview" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="q-sh3 text-[var(--q-text-secondary)] truncate min-w-0 flex-1">{prompt}</motion.p>
             )}
           </AnimatePresence>
         </div>
+        <Button variant="text-secondary" circle size="medium" tabIndex={-1}>
+          <span className="material-symbols-rounded" style={{ fontSize: 20 }}>{promptOpen ? 'expand_less' : 'expand_more'}</span>
+        </Button>
+      </div>
+      <AnimatePresence initial={false}>
+        {promptOpen && (
+          <motion.div key="prompt-body" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.28, ease: [0.25, 0.46, 0.45, 0.94] }} className="overflow-hidden">
+            <p className="q-sh3 text-[var(--q-text-primary)] leading-relaxed px-[var(--q-space-24)] pb-[var(--q-space-24)]">{prompt}</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
 
-        {/* Right: Version tabs + Overall + dimension cards */}
+  return panel(
+    <div className="flex flex-col h-full bg-[var(--q-surface-bg)]">
+
+      {/* Tab bar */}
+      {showTabs && (
+        <div className="flex-shrink-0 px-[var(--q-space-24)] pt-[var(--q-space-16)] pb-[var(--q-space-4)] flex items-center gap-[var(--q-space-4)]">
+          {allVersions.length >= 2 && (
+            <button onClick={() => setActiveTab('comparison')} className={tabCls('comparison')}>Comparison</button>
+          )}
+          {allVersions.map((_, i) => (
+            <button key={i + 1} onClick={() => setActiveTab(i + 1)} className={tabCls(i + 1)}>Response {i + 1}</button>
+          ))}
+          {activeTab === 'writing' && (
+            <span className={tabCls('writing')}>Response {allVersions.length + 1}</span>
+          )}
+        </div>
+      )}
+
+      {/* Body */}
+      <div className={['flex-1 overflow-hidden', typeof activeTab === 'number' ? 'flex' : ''].join(' ')}>
+
+        {/* ── Comparison view ── */}
+        {activeTab === 'comparison' && (
+          <div className="flex-1 overflow-y-auto bg-[var(--q-surface-base)] flex flex-col items-center justify-center px-[var(--q-space-24)] py-[var(--q-space-32)] gap-[var(--q-space-8)]">
+            <p className="q-sh4 text-[var(--q-text-secondary)]">Score over responses</p>
+            <ComparisonChart versions={allVersions} />
+          </div>
+        )}
+
+        {/* ── Writing view (Try again) ── */}
+        {activeTab === 'writing' && (
+          <div className="flex-1 overflow-y-auto bg-[var(--q-surface-base)] px-[var(--q-space-24)] py-[var(--q-space-24)] flex flex-col gap-[var(--q-space-12)]">
+            {PromptCard}
+            <div className="bg-[var(--q-surface-base)] border-2 border-[var(--q-twilight-300)] rounded-[var(--q-radius-xl)] overflow-hidden flex flex-col relative flex-shrink-0">
+              <div className="absolute top-[var(--q-space-8)] right-[var(--q-space-12)] flex items-center gap-[var(--q-space-8)] z-10">
+                <Button variant="text-secondary" circle size="medium" onClick={() => setIsPendingScratchPad(v => !v)} title="Scratch pad">
+                  <span className="material-symbols-rounded" style={{ fontSize: 20, color: isPendingScratchPad ? 'var(--q-text-highlight)' : undefined }}>edit_note</span>
+                </Button>
+                <Button variant="text-secondary" circle size="medium" onClick={() => setIsPendingExpanded(v => !v)} title="Expand">
+                  <span className="material-symbols-rounded" style={{ fontSize: 20 }}>{isPendingExpanded ? 'collapse_content' : 'expand_content'}</span>
+                </Button>
+              </div>
+              {isPendingScratchPad ? (
+                pendingScratchPadTemplate === 'custom' ? (
+                  <WritingArea value={pendingScratchPadText} onChange={setPendingScratchPadText} className={isPendingExpanded ? 'border-0 focus:ring-0 rounded-none pr-[104px]' : 'border-0 focus:ring-0 rounded-none pr-[104px] h-[38vh] min-h-[200px]'} fill={isPendingExpanded} placeholder="Your position, why, supporting examples, etc." />
+                ) : (
+                  <div className={['overflow-y-auto px-[var(--q-space-16)] pt-[var(--q-space-16)] pb-[var(--q-space-4)] flex flex-col gap-[var(--q-space-16)]', isPendingExpanded ? 'flex-1 min-h-0' : 'h-[38vh] min-h-[200px]'].join(' ')} style={{ maskImage: 'linear-gradient(to bottom, transparent 0, black 20px, black calc(100% - 20px), transparent 100%)', WebkitMaskImage: 'linear-gradient(to bottom, transparent 0, black 20px, black calc(100% - 20px), transparent 100%)' }}>
+                    {pendingScratchPadTemplate === 'outline' ? (
+                      <>
+                        <ScratchField label="What is the question?" value={pendingOutlineData.question} onChange={v => setPendingOutlineData(d => ({ ...d, question: v }))} />
+                        <ScratchField label="What position will I take?" value={pendingOutlineData.position} onChange={v => setPendingOutlineData(d => ({ ...d, position: v }))} />
+                        <div className="flex flex-col gap-[var(--q-space-8)]">
+                          <p className="q-sh4 text-[var(--q-text-secondary)]">Why?</p>
+                          <NumberedField number={1} value={pendingOutlineData.why1} onChange={v => setPendingOutlineData(d => ({ ...d, why1: v }))} />
+                          <NumberedField number={2} value={pendingOutlineData.why2} onChange={v => setPendingOutlineData(d => ({ ...d, why2: v }))} />
+                          <NumberedField number={3} value={pendingOutlineData.why3} onChange={v => setPendingOutlineData(d => ({ ...d, why3: v }))} />
+                        </div>
+                        <ScratchField label="Best example:" value={pendingOutlineData.example} onChange={v => setPendingOutlineData(d => ({ ...d, example: v }))} />
+                        <ScratchField label="Final takeaway:" value={pendingOutlineData.takeaway} onChange={v => setPendingOutlineData(d => ({ ...d, takeaway: v }))} />
+                      </>
+                    ) : (
+                      <>
+                        <ScratchField label="Position:" value={pendingThoughtFlowData.position} onChange={v => setPendingThoughtFlowData(d => ({ ...d, position: v }))} />
+                        <ScratchField label="Reason 1:" value={pendingThoughtFlowData.reason1} onChange={v => setPendingThoughtFlowData(d => ({ ...d, reason1: v }))} />
+                        <ScratchField label="Reason 2:" value={pendingThoughtFlowData.reason2} onChange={v => setPendingThoughtFlowData(d => ({ ...d, reason2: v }))} />
+                        <ScratchField label="Example(s):" value={pendingThoughtFlowData.examples} onChange={v => setPendingThoughtFlowData(d => ({ ...d, examples: v }))} />
+                        <ScratchField label="Conclusion:" value={pendingThoughtFlowData.conclusion} onChange={v => setPendingThoughtFlowData(d => ({ ...d, conclusion: v }))} />
+                      </>
+                    )}
+                  </div>
+                )
+              ) : (
+                <WritingArea value={pendingText} onChange={setPendingText} className={isPendingExpanded ? 'border-0 focus:ring-0 rounded-none pr-[104px]' : 'border-0 focus:ring-0 rounded-none pr-[104px] h-[38vh] min-h-[200px]'} fill={isPendingExpanded} placeholder="Your response..." />
+              )}
+              <div className="px-[var(--q-space-16)] py-[var(--q-space-12)] flex items-center justify-between flex-shrink-0">
+                {isPendingScratchPad ? (
+                  <div className="relative">
+                    {pendingTemplateMenuOpen && <div className="fixed inset-0 z-[5]" onClick={() => setPendingTemplateMenuOpen(false)} />}
+                    {pendingTemplateMenuOpen && (
+                      <div className="absolute bottom-full mb-2 left-0 z-10 bg-[var(--q-surface-base)] border border-[var(--q-border-primary)] rounded-[var(--q-radius-xl)] shadow-lg overflow-hidden min-w-[160px]">
+                        {SCRATCH_PAD_TEMPLATES.map(t => (
+                          <button key={t.id} onClick={() => { setPendingScratchPadTemplate(t.id); setPendingTemplateMenuOpen(false) }} className="w-full flex items-center justify-between px-[var(--q-space-16)] py-[var(--q-space-10)] q-sh4 hover:bg-[var(--q-surface-bg)] transition-colors">
+                            <span style={{ color: pendingScratchPadTemplate === t.id ? 'var(--q-text-highlight)' : 'var(--q-text-primary)' }}>{t.label}</span>
+                            {pendingScratchPadTemplate === t.id && <span className="material-symbols-rounded" style={{ fontSize: 18, color: 'var(--q-text-highlight)' }}>check_circle</span>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <button onClick={() => setPendingTemplateMenuOpen(v => !v)} className="flex items-center gap-[var(--q-space-4)] q-sh4 text-[var(--q-text-secondary)] hover:text-[var(--q-text-primary)] transition-colors">
+                      <span>{SCRATCH_PAD_TEMPLATES.find(t => t.id === pendingScratchPadTemplate)?.label}</span>
+                      <span className="material-symbols-rounded" style={{ fontSize: 16 }}>{pendingTemplateMenuOpen ? 'expand_less' : 'expand_more'}</span>
+                    </button>
+                  </div>
+                ) : (
+                  <WordCount text={pendingText} />
+                )}
+                <CountdownTimer totalSeconds={timeLimitSeconds} onExpire={handleRewriteSubmit} />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Response view (left column) ── */}
+        {typeof activeTab === 'number' && (
+          <div className="flex-1 min-w-0 overflow-y-auto bg-[var(--q-surface-base)] px-[var(--q-space-24)] py-[var(--q-space-24)] flex flex-col gap-[var(--q-space-12)]">
+
+          {PromptCard}
+
+          {/* Response text with per-version annotations */}
+          {(() => {
+            const v = allVersions[activeResponseNum - 1]
+            if (!v) return null
+            const segs = getVersionSegments(v)
+            return (
+              <div className="rounded-[var(--q-radius-xl)] bg-[var(--q-surface-bg)] overflow-hidden flex-shrink-0">
+                <div className="px-[var(--q-space-20)] py-[var(--q-space-20)] max-h-[60vh] overflow-y-auto">
+                  <p className="q-sh3 text-[var(--q-text-primary)] leading-relaxed whitespace-pre-wrap">
+                    {segs.map((seg, si) => {
+                      if (!seg.key) return <span key={si}>{seg.text}</span>
+                      const dimScore = toDisplayScore(v.feedback?.dimensions?.[seg.key as keyof typeof v.feedback.dimensions]?.score ?? 0)
+                      const colors = getDimensionColors(dimScore)
+                      const isActive = activeDimension === seg.key
+                      return (
+                        <mark key={si} ref={el => { highlightRefs.current[seg.key!] = el }} onClick={() => handleHighlightClick(seg.key!)} className="cursor-pointer transition-colors rounded-sm" style={{ backgroundColor: isActive ? colors.activeHighlight : colors.highlight, '--mark-hover-bg': isActive ? colors.activeHighlight : colors.hoverHighlight } as React.CSSProperties}>
+                          {seg.text}
+                        </mark>
+                      )
+                    })}
+                  </p>
+                </div>
+              </div>
+            )
+          })()}
+        </div>
+        )}
+
+        {/* Right panel — only for response view */}
+        {typeof activeTab === 'number' && (
         <div className="w-[271px] flex-shrink-0 overflow-y-auto bg-[var(--q-surface-base)] px-[var(--q-space-12)] py-[var(--q-space-24)] flex flex-col gap-[var(--q-space-8)]">
 
 
@@ -1076,7 +1077,7 @@ function FeedbackState() {
             </div>
             <AnimatePresence initial={false}>
               {overallOpen && !versionPending && (
-                <motion.div key={`overall-body-${activeVersion}`} initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2, ease: [0.30, 0.00, 0.44, 1.00] }} className="overflow-hidden">
+                <motion.div key={`overall-body-${activeResponseNum}`} initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2, ease: [0.30, 0.00, 0.44, 1.00] }} className="overflow-hidden">
                   <div className="px-[var(--q-space-16)] pb-[var(--q-space-16)]">
                     <p className="q-b4 text-[var(--q-text-primary)] leading-relaxed">{displayedFeedback.coach_note}</p>
                   </div>
@@ -1166,13 +1167,15 @@ function FeedbackState() {
             </div>
           )}
         </div>
+        )}
+
       </div>
 
       {/* Bottom bar */}
       <div className="flex-shrink-0 relative">
         <div className="absolute -top-10 left-0 right-0 h-10 pointer-events-none" style={{ background: 'linear-gradient(to bottom, transparent, var(--q-surface-base))' }} />
         <div className="bg-[var(--q-surface-base)] px-[var(--q-space-24)] py-[var(--q-space-16)] flex items-center justify-center gap-[var(--q-space-16)]">
-          {showRewrite ? (
+          {activeTab === 'writing' ? (
             <Button size="xlarge" onClick={() => setShowRewriteConfirm(true)} disabled={countWords(pendingText) < 100 || isSubmittingRewrite}>
               {isSubmittingRewrite ? (
                 <span className="flex items-center gap-[var(--q-space-8)]">
@@ -1190,9 +1193,9 @@ function FeedbackState() {
         </div>
       </div>
 
-      <Modal open={showRewriteConfirm} onClose={() => setShowRewriteConfirm(false)} title="Submit your rewrite?">
+      <Modal open={showRewriteConfirm} onClose={() => setShowRewriteConfirm(false)} title="Submit your response?">
         <div className="space-y-[var(--q-space-20)]">
-          <p className="q-b4 text-[var(--q-text-secondary)]">This will be scored as Version {pendingVersionNum ?? '—'}.</p>
+          <p className="q-b4 text-[var(--q-text-secondary)]">This will be scored as Response {allVersions.length + 1}.</p>
           <div className="flex gap-[var(--q-space-12)]">
             <Button variant="secondary" size="md" className="flex-1" onClick={() => setShowRewriteConfirm(false)}>Keep writing</Button>
             <Button size="md" className="flex-1" onClick={() => { setShowRewriteConfirm(false); handleRewriteSubmit() }}>Submit</Button>

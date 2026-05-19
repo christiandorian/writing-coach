@@ -32,13 +32,14 @@ export function computeTotalScore(dimensions: {
   logical_consistency: { score: number }
   use_of_evidence: { score: number }
   tradeoff_awareness: { score: number }
-}): number {
+} | null | undefined): number {
+  if (!dimensions) return 0
   const sum =
-    dimensions.position_clarity.score +
-    dimensions.argument_structure.score +
-    dimensions.logical_consistency.score +
-    dimensions.use_of_evidence.score +
-    dimensions.tradeoff_awareness.score
+    (dimensions.position_clarity?.score ?? 0) +
+    (dimensions.argument_structure?.score ?? 0) +
+    (dimensions.logical_consistency?.score ?? 0) +
+    (dimensions.use_of_evidence?.score ?? 0) +
+    (dimensions.tradeoff_awareness?.score ?? 0)
   return Math.round(sum * 2) // max 100
 }
 

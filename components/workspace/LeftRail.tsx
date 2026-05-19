@@ -221,20 +221,26 @@ export default function LeftRail({ sourcesLoading = false }: { sourcesLoading?: 
             {selectedCount} of {sources.length} selected
           </p>
           <button
-            onClick={() => selectedCount > 0 && sources.forEach((s) => {
-              if (s.selected) {
-                toggleSource(s.id)
-                updateSelectedInDB(s.id, false)
+            onClick={() => {
+              if (selectedCount === 0) {
+                sources.forEach((s) => {
+                  if (!s.selected) {
+                    toggleSource(s.id)
+                    updateSelectedInDB(s.id, true)
+                  }
+                })
+              } else {
+                sources.forEach((s) => {
+                  if (s.selected) {
+                    toggleSource(s.id)
+                    updateSelectedInDB(s.id, false)
+                  }
+                })
               }
-            })}
-            disabled={selectedCount === 0}
-            className={`q-sh4 flex-shrink-0 transition-colors ${
-              selectedCount > 0
-                ? 'text-[var(--q-twilight-500)] hover:text-[var(--q-twilight-600)] cursor-pointer'
-                : 'text-[var(--q-text-disabled)] cursor-default'
-            }`}
+            }}
+            className="q-sh4 flex-shrink-0 transition-colors text-[var(--q-twilight-500)] hover:text-[var(--q-twilight-600)] cursor-pointer"
           >
-            Clear all
+            {selectedCount === 0 ? 'Select all' : 'Clear all'}
           </button>
         </div>
         </>

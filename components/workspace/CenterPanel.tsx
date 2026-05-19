@@ -707,13 +707,10 @@ interface DimColors { bg: string; activeBg: string; border: string; text: string
 function getDimensionColors(displayScore: number): DimColors {
   if (displayScore >= 18) {
     // A — success
-    return { bg: 'var(--q-mint-100)', activeBg: 'var(--q-mint-200)', border: 'var(--q-border-success)', text: 'var(--q-text-success)', highlight: 'var(--q-mint-200)', activeHighlight: 'var(--q-mint-300)' }
-  } else if (displayScore >= 14) {
-    // B–C — warning
-    return { bg: 'var(--q-sunset-100)', activeBg: 'var(--q-sunset-200)', border: 'var(--q-border-warning)', text: 'var(--q-text-warning)', highlight: 'var(--q-sherbert-200)', activeHighlight: 'var(--q-sherbert-300)' }
+    return { bg: 'var(--q-mint-100)', activeBg: 'var(--q-mint-200)', border: 'var(--q-border-success)', text: 'var(--q-text-success)', highlight: 'var(--q-mint-100)', activeHighlight: 'var(--q-mint-300)' }
   } else {
-    // D or below — error
-    return { bg: 'var(--q-cherry-100)', activeBg: 'var(--q-cherry-200)', border: 'var(--q-border-error)', text: 'var(--q-text-error)', highlight: 'var(--q-cherry-100)', activeHighlight: 'var(--q-cherry-200)' }
+    // Below A — warning (sherbert for all non-success scores)
+    return { bg: 'var(--q-sunset-100)', activeBg: 'var(--q-sunset-200)', border: 'var(--q-border-warning)', text: 'var(--q-text-warning)', highlight: 'var(--q-sherbert-200)', activeHighlight: 'var(--q-sherbert-300)' }
   }
 }
 
@@ -759,13 +756,20 @@ function FeedbackState() {
   const [activeVersion, setActiveVersion] = useState(1)  // 1-indexed; matches right-col tab
   const highlightRefs = useRef<Record<string, HTMLElement | null>>({})
   const cardRefs = useRef<Record<string, HTMLElement | null>>({})
+  const [isPendingScratchPad, setIsPendingScratchPad] = useState(false)
+  const [pendingScratchPadText, setPendingScratchPadText] = useState('')
+  const [isPendingExpanded, setIsPendingExpanded] = useState(false)
+  const [pendingScratchPadTemplate, setPendingScratchPadTemplate] = useState<ScratchPadTemplate>('outline')
+  const [pendingTemplateMenuOpen, setPendingTemplateMenuOpen] = useState(false)
+  const [pendingOutlineData, setPendingOutlineData] = useState<OutlineData>({ question: '', position: '', why1: '', why2: '', why3: '', example: '', takeaway: '' })
+  const [pendingThoughtFlowData, setPendingThoughtFlowData] = useState<ThoughtFlowData>({ position: '', reason1: '', reason2: '', examples: '', conclusion: '' })
 
   if (!feedbackV1) return null
 
   // allVersions: [V1, ...submitted rewrites]
   const allVersions = [
     { text: responseText, feedback: feedbackV1 },
-    ...rewriteVersions,
+    ...rewriteVersions.filter(v => v.text?.trim() && v.feedback?.dimensions),
   ]
   const pendingVersionNum = showRewrite ? allVersions.length + 1 : null
   const hasMultipleVersions = allVersions.length > 1 || showRewrite
@@ -775,7 +779,7 @@ function FeedbackState() {
   const versionPending = activeVersion > allVersions.length  // selected tab has no feedback yet
   const totalScore = versionPending ? 0 : computeTotalScore(displayedFeedback.dimensions)
 
-  const annotations = DIMENSIONS.map(d => ({ key: d.key, quote: feedbackV1.dimensions[d.key].highlighted_text }))
+  const annotations = DIMENSIONS.map(d => ({ key: d.key, quote: feedbackV1.dimensions?.[d.key]?.highlighted_text }))
   const segments = annotateEssay(responseText, annotations)
 
   const selectVersion = (v: number) => {
@@ -815,11 +819,21 @@ function FeedbackState() {
   }
 
   const handleHighlightClick = (key: string) => {
-    const next = key === activeDimension ? null : key
+    const isActive = key === activeDimension
+    const next = isActive ? null : key
     setActiveDimension(next)
     if (next) {
-      setOpenDimensions(prev => new Set(Array.from(prev).concat(next)))
+      // Expand only the clicked section, collapse all others (including Overall)
+      setOpenDimensions(new Set([next]))
+      setOverallOpen(false)
       setTimeout(() => cardRefs.current[next]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 0)
+    } else {
+      // Clicking active highlight again — collapse that section
+      setOpenDimensions(prev => {
+        const updated = new Set(Array.from(prev))
+        updated.delete(key)
+        return updated
+      })
     }
   }
 
@@ -844,25 +858,44 @@ function FeedbackState() {
       <div className="flex-1 overflow-hidden flex">
 
         {/* Left: Prompt + version accordions */}
-        <div className="flex-1 min-w-0 overflow-hidden bg-[var(--q-surface-base)] px-[var(--q-space-24)] py-[var(--q-space-24)] flex flex-col gap-[var(--q-space-12)]">
+        <div className="flex-1 min-w-0 overflow-y-auto bg-[var(--q-surface-base)] px-[var(--q-space-24)] py-[var(--q-space-24)] flex flex-col gap-[var(--q-space-12)]">
 
           {/* Prompt accordion */}
           <div className="rounded-[var(--q-radius-xl)] bg-[var(--q-surface-bg)] overflow-hidden flex-shrink-0">
-            <button
-              className="w-full px-[var(--q-space-20)] py-[var(--q-space-16)] flex items-center justify-between"
+            {/* Header — always static, never moves */}
+            <div
+              className="flex items-center gap-[var(--q-space-8)] px-[var(--q-space-24)] py-[var(--q-space-16)] justify-between cursor-pointer"
               onClick={() => setPromptOpen(o => !o)}
             >
-              <span className="q-sh4 text-[var(--q-text-secondary)]">Prompt</span>
-              <span className="material-symbols-rounded text-[var(--q-text-muted)]" style={{ fontSize: 20 }}>
-                {promptOpen ? 'expand_less' : 'expand_more'}
-              </span>
-            </button>
+              <div className="flex items-center gap-[var(--q-space-8)] min-w-0 flex-1">
+                <span className="inline-flex items-center flex-shrink-0 q-sh5 text-[var(--q-surface-base)] bg-[var(--q-text-primary)] px-[var(--q-space-12)] py-[var(--q-space-4)] rounded-[var(--q-radius-full)]">
+                  Prompt
+                </span>
+                <AnimatePresence mode="popLayout">
+                  {!promptOpen && (
+                    <motion.p
+                      key="preview"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.15 }}
+                      className="q-sh3 text-[var(--q-text-secondary)] truncate min-w-0 flex-1"
+                    >
+                      {prompt}
+                    </motion.p>
+                  )}
+                </AnimatePresence>
+              </div>
+              <Button variant="text-secondary" circle size="medium" tabIndex={-1}>
+                <span className="material-symbols-rounded" style={{ fontSize: 20 }}>
+                  {promptOpen ? 'expand_less' : 'expand_more'}
+                </span>
+              </Button>
+            </div>
             <AnimatePresence initial={false}>
               {promptOpen && (
-                <motion.div key="prompt-body" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2, ease: [0.30, 0.00, 0.44, 1.00] }} className="overflow-hidden">
-                  <div className="px-[var(--q-space-20)] pb-[var(--q-space-20)]">
-                    <p className="q-sh3 text-[var(--q-text-primary)] leading-relaxed">{prompt}</p>
-                  </div>
+                <motion.div key="prompt-body" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.28, ease: [0.25, 0.46, 0.45, 0.94] }} className="overflow-hidden">
+                  <p className="q-sh3 text-[var(--q-text-primary)] leading-relaxed px-[var(--q-space-24)] pb-[var(--q-space-24)]">{prompt}</p>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -877,7 +910,7 @@ function FeedbackState() {
               <div key={vNum} className="rounded-[var(--q-radius-xl)] bg-[var(--q-surface-bg)] overflow-hidden flex-shrink-0">
                 <button
                   className="w-full px-[var(--q-space-20)] py-[var(--q-space-16)] flex items-center justify-between"
-                  onClick={() => setOpenVersion(isOpen ? 0 : vNum)}
+                  onClick={() => { const next = isOpen ? 0 : vNum; setOpenVersion(next); if (next) setActiveVersion(next) }}
                 >
                   <span className="q-sh4 text-[var(--q-text-secondary)]">{label}</span>
                   <span className="material-symbols-rounded text-[var(--q-text-muted)]" style={{ fontSize: 20 }}>
@@ -892,7 +925,7 @@ function FeedbackState() {
                           <p className="q-sh3 text-[var(--q-text-primary)] leading-relaxed whitespace-pre-wrap">
                             {segments.map((seg, si) => {
                               if (!seg.key) return <span key={si}>{seg.text}</span>
-                              const dimScore = toDisplayScore(feedbackV1.dimensions[seg.key as keyof typeof feedbackV1.dimensions].score)
+                              const dimScore = toDisplayScore(feedbackV1.dimensions?.[seg.key as keyof typeof feedbackV1.dimensions]?.score ?? 0)
                               const colors = getDimensionColors(dimScore)
                               const isActive = activeDimension === seg.key
                               return (
@@ -920,12 +953,9 @@ function FeedbackState() {
                 <div className="bg-[var(--q-surface-bg)] overflow-hidden rounded-[var(--q-radius-xl)]">
                   <button
                     className="w-full px-[var(--q-space-20)] py-[var(--q-space-16)] flex items-center justify-between"
-                    onClick={() => setOpenVersion(openVersion === pendingVersionNum ? 0 : pendingVersionNum)}
+                    onClick={() => { const next = openVersion === pendingVersionNum ? 0 : pendingVersionNum!; setOpenVersion(next); if (next) setActiveVersion(next) }}
                   >
-                    <div className="flex items-center gap-[var(--q-space-12)]">
-                      <span className="q-sh4 text-[var(--q-text-secondary)]">Version {pendingVersionNum}</span>
-                      <CountdownTimer totalSeconds={timeLimitSeconds} onExpire={handleRewriteSubmit} />
-                    </div>
+                    <span className="q-sh4 text-[var(--q-text-secondary)]">Version {pendingVersionNum}</span>
                     <span className="material-symbols-rounded text-[var(--q-text-muted)]" style={{ fontSize: 20 }}>
                       {openVersion === pendingVersionNum ? 'expand_less' : 'expand_more'}
                     </span>
@@ -933,9 +963,81 @@ function FeedbackState() {
                   <AnimatePresence initial={false}>
                     {openVersion === pendingVersionNum && (
                       <motion.div key="pending-body" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2, ease: [0.30, 0.00, 0.44, 1.00] }} className="overflow-hidden">
-                        <div className="px-[var(--q-space-20)] pb-[var(--q-space-16)] space-y-[var(--q-space-8)] max-h-[48vh] overflow-y-auto">
-                          <WritingArea value={pendingText} onChange={setPendingText} className="h-[38vh] min-h-[200px]" />
-                          <WordCount text={pendingText} />
+                        <div className="px-[var(--q-space-20)] pb-[var(--q-space-16)]">
+                          <div className={[
+                            'bg-[var(--q-surface-base)] border-2 border-[var(--q-twilight-300)] rounded-[var(--q-radius-xl)] overflow-hidden flex flex-col relative',
+                          ].join(' ')}>
+                            {/* Overlay buttons */}
+                            <div className="absolute top-[var(--q-space-8)] right-[var(--q-space-12)] flex items-center gap-[var(--q-space-8)] z-10">
+                              <Button variant="text-secondary" circle size="medium" onClick={() => setIsPendingScratchPad(v => !v)} title="Scratch pad">
+                                <span className="material-symbols-rounded" style={{ fontSize: 20, color: isPendingScratchPad ? 'var(--q-text-highlight)' : undefined }}>edit_note</span>
+                              </Button>
+                              <Button variant="text-secondary" circle size="medium" onClick={() => setIsPendingExpanded(v => !v)} title="Expand">
+                                <span className="material-symbols-rounded" style={{ fontSize: 20 }}>{isPendingExpanded ? 'collapse_content' : 'expand_content'}</span>
+                              </Button>
+                            </div>
+
+                            {/* Content area */}
+                            {isPendingScratchPad ? (
+                              pendingScratchPadTemplate === 'custom' ? (
+                                <WritingArea value={pendingScratchPadText} onChange={setPendingScratchPadText} className={isPendingExpanded ? 'border-0 focus:ring-0 rounded-none pr-[104px]' : 'border-0 focus:ring-0 rounded-none pr-[104px] h-[38vh] min-h-[200px]'} fill={isPendingExpanded} placeholder="Your position, why, supporting examples, etc." />
+                              ) : (
+                                <div className={['overflow-y-auto px-[var(--q-space-16)] pt-[var(--q-space-16)] pb-[var(--q-space-4)] flex flex-col gap-[var(--q-space-16)]', isPendingExpanded ? 'flex-1 min-h-0' : 'h-[38vh] min-h-[200px]'].join(' ')}
+                                  style={{ maskImage: 'linear-gradient(to bottom, transparent 0, black 20px, black calc(100% - 20px), transparent 100%)', WebkitMaskImage: 'linear-gradient(to bottom, transparent 0, black 20px, black calc(100% - 20px), transparent 100%)' }}>
+                                  {pendingScratchPadTemplate === 'outline' ? (
+                                    <>
+                                      <ScratchField label="What is the question?" value={pendingOutlineData.question} onChange={v => setPendingOutlineData(d => ({ ...d, question: v }))} />
+                                      <ScratchField label="What position will I take?" value={pendingOutlineData.position} onChange={v => setPendingOutlineData(d => ({ ...d, position: v }))} />
+                                      <div className="flex flex-col gap-[var(--q-space-8)]">
+                                        <p className="q-sh4 text-[var(--q-text-secondary)]">Why?</p>
+                                        <NumberedField number={1} value={pendingOutlineData.why1} onChange={v => setPendingOutlineData(d => ({ ...d, why1: v }))} />
+                                        <NumberedField number={2} value={pendingOutlineData.why2} onChange={v => setPendingOutlineData(d => ({ ...d, why2: v }))} />
+                                        <NumberedField number={3} value={pendingOutlineData.why3} onChange={v => setPendingOutlineData(d => ({ ...d, why3: v }))} />
+                                      </div>
+                                      <ScratchField label="Best example:" value={pendingOutlineData.example} onChange={v => setPendingOutlineData(d => ({ ...d, example: v }))} />
+                                      <ScratchField label="Final takeaway:" value={pendingOutlineData.takeaway} onChange={v => setPendingOutlineData(d => ({ ...d, takeaway: v }))} />
+                                    </>
+                                  ) : (
+                                    <>
+                                      <ScratchField label="Position:" value={pendingThoughtFlowData.position} onChange={v => setPendingThoughtFlowData(d => ({ ...d, position: v }))} />
+                                      <ScratchField label="Reason 1:" value={pendingThoughtFlowData.reason1} onChange={v => setPendingThoughtFlowData(d => ({ ...d, reason1: v }))} />
+                                      <ScratchField label="Reason 2:" value={pendingThoughtFlowData.reason2} onChange={v => setPendingThoughtFlowData(d => ({ ...d, reason2: v }))} />
+                                      <ScratchField label="Example(s):" value={pendingThoughtFlowData.examples} onChange={v => setPendingThoughtFlowData(d => ({ ...d, examples: v }))} />
+                                      <ScratchField label="Conclusion:" value={pendingThoughtFlowData.conclusion} onChange={v => setPendingThoughtFlowData(d => ({ ...d, conclusion: v }))} />
+                                    </>
+                                  )}
+                                </div>
+                              )
+                            ) : (
+                              <WritingArea value={pendingText} onChange={setPendingText} className={isPendingExpanded ? 'border-0 focus:ring-0 rounded-none pr-[104px]' : 'border-0 focus:ring-0 rounded-none pr-[104px] h-[38vh] min-h-[200px]'} fill={isPendingExpanded} placeholder="Your response..." />
+                            )}
+
+                            {/* Footer */}
+                            <div className="px-[var(--q-space-16)] py-[var(--q-space-12)] flex items-center justify-between flex-shrink-0">
+                              {isPendingScratchPad ? (
+                                <div className="relative">
+                                  {pendingTemplateMenuOpen && <div className="fixed inset-0 z-[5]" onClick={() => setPendingTemplateMenuOpen(false)} />}
+                                  {pendingTemplateMenuOpen && (
+                                    <div className="absolute bottom-full mb-2 left-0 z-10 bg-[var(--q-surface-base)] border border-[var(--q-border-primary)] rounded-[var(--q-radius-xl)] shadow-lg overflow-hidden min-w-[160px]">
+                                      {SCRATCH_PAD_TEMPLATES.map(t => (
+                                        <button key={t.id} onClick={() => { setPendingScratchPadTemplate(t.id); setPendingTemplateMenuOpen(false) }} className="w-full flex items-center justify-between px-[var(--q-space-16)] py-[var(--q-space-10)] q-sh4 hover:bg-[var(--q-surface-bg)] transition-colors">
+                                          <span style={{ color: pendingScratchPadTemplate === t.id ? 'var(--q-text-highlight)' : 'var(--q-text-primary)' }}>{t.label}</span>
+                                          {pendingScratchPadTemplate === t.id && <span className="material-symbols-rounded" style={{ fontSize: 18, color: 'var(--q-text-highlight)' }}>check_circle</span>}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                  <button onClick={() => setPendingTemplateMenuOpen(v => !v)} className="flex items-center gap-[var(--q-space-4)] q-sh4 text-[var(--q-text-secondary)] hover:text-[var(--q-text-primary)] transition-colors">
+                                    <span>{SCRATCH_PAD_TEMPLATES.find(t => t.id === pendingScratchPadTemplate)?.label}</span>
+                                    <span className="material-symbols-rounded" style={{ fontSize: 16 }}>{pendingTemplateMenuOpen ? 'expand_less' : 'expand_more'}</span>
+                                  </button>
+                                </div>
+                              ) : (
+                                <WordCount text={pendingText} />
+                              )}
+                              <CountdownTimer totalSeconds={timeLimitSeconds} onExpire={handleRewriteSubmit} />
+                            </div>
+                          </div>
                         </div>
                       </motion.div>
                     )}
@@ -949,51 +1051,15 @@ function FeedbackState() {
         {/* Right: Version tabs + Overall + dimension cards */}
         <div className="w-[271px] flex-shrink-0 overflow-y-auto bg-[var(--q-surface-base)] px-[var(--q-space-12)] py-[var(--q-space-24)] flex flex-col gap-[var(--q-space-8)]">
 
-          {/* Scrollable version tab bar */}
-          <AnimatePresence initial={false}>
-            {hasMultipleVersions && (
-              <motion.div key="version-tabs" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2, ease: [0.30, 0.00, 0.44, 1.00] }} className="overflow-hidden flex-shrink-0">
-                <div className="overflow-x-auto pb-[var(--q-space-4)] mb-[var(--q-space-4)] scrollbar-hide">
-                  <div className="flex items-center gap-[var(--q-space-4)] min-w-max">
-                    {allVersions.map((_, i) => {
-                      const v = i + 1
-                      return (
-                        <button
-                          key={v}
-                          onClick={() => selectVersion(v)}
-                          className={[
-                            'q-sh5 px-[var(--q-space-12)] py-[var(--q-space-6)] rounded-[var(--q-radius-full)] transition-all whitespace-nowrap flex-shrink-0',
-                            activeVersion === v
-                              ? 'bg-[var(--q-twilight-100)] text-[var(--q-twilight-600)]'
-                              : 'text-[var(--q-text-muted)] hover:text-[var(--q-text-secondary)] hover:bg-[var(--q-surface-bg)]',
-                          ].join(' ')}
-                        >
-                          Version {v}
-                        </button>
-                      )
-                    })}
-                    {showRewrite && pendingVersionNum && (
-                      <button
-                        disabled
-                        className="q-sh5 px-[var(--q-space-12)] py-[var(--q-space-6)] rounded-[var(--q-radius-full)] whitespace-nowrap flex-shrink-0 text-[var(--q-text-muted)] cursor-default opacity-50"
-                      >
-                        Version {pendingVersionNum}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
 
           {/* Overall score card */}
           <div
             className="rounded-[var(--q-radius-xl)] border-2 bg-[var(--q-surface-base)] overflow-hidden flex-shrink-0"
             style={{ borderColor: versionPending ? 'var(--q-border-primary)' : 'var(--q-twilight-500)' }}
           >
-            <button
+            <div
               onClick={() => !versionPending && setOverallOpen(o => !o)}
-              className="w-full px-[var(--q-space-16)] py-[var(--q-space-16)] flex items-center justify-between"
+              className={['w-full px-[var(--q-space-16)] py-[var(--q-space-16)] flex items-center justify-between', !versionPending ? 'cursor-pointer' : ''].join(' ')}
             >
               {versionPending ? (
                 <span className="q-sh4 text-[var(--q-text-muted)]">Overall — pending</span>
@@ -1001,11 +1067,13 @@ function FeedbackState() {
                 <span className="q-h5 text-[var(--q-twilight-600)]">Overall {totalScore}/100</span>
               )}
               {!versionPending && (
-                <span className="material-symbols-rounded flex-shrink-0" style={{ fontSize: 20, color: 'var(--q-twilight-500)' }}>
-                  {overallOpen ? 'expand_less' : 'expand_more'}
-                </span>
+                <Button variant="text-secondary" circle size="small" tabIndex={-1} className="bg-[var(--q-btn-tertiary-bg)]">
+                  <span className="material-symbols-rounded" style={{ fontSize: 16 }}>
+                    {overallOpen ? 'expand_less' : 'expand_more'}
+                  </span>
+                </Button>
               )}
-            </button>
+            </div>
             <AnimatePresence initial={false}>
               {overallOpen && !versionPending && (
                 <motion.div key={`overall-body-${activeVersion}`} initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2, ease: [0.30, 0.00, 0.44, 1.00] }} className="overflow-hidden">
@@ -1019,7 +1087,8 @@ function FeedbackState() {
 
           {/* Dimension cards */}
           {DIMENSIONS.map(d => {
-            const dim = displayedFeedback.dimensions[d.key]
+            const dim = displayedFeedback.dimensions?.[d.key]
+            if (!dim) return null
             const isOpen = openDimensions.has(d.key)
             const isActive = activeDimension === d.key
             const displayScore = versionPending ? null : toDisplayScore(dim.score)
@@ -1039,9 +1108,11 @@ function FeedbackState() {
                     {versionPending ? d.name : `${d.name} ${displayScore}/20`}
                   </span>
                   {!versionPending && (
-                    <span className="material-symbols-rounded flex-shrink-0" style={{ fontSize: 20, color: colors.text }}>
-                      {isOpen ? 'expand_less' : 'expand_more'}
-                    </span>
+                    <Button variant="text-secondary" circle size="small" tabIndex={-1} className="bg-[var(--q-btn-tertiary-bg)]">
+                      <span className="material-symbols-rounded" style={{ fontSize: 16 }}>
+                        {isOpen ? 'expand_less' : 'expand_more'}
+                      </span>
+                    </Button>
                   )}
                 </div>
                 <AnimatePresence initial={false}>

@@ -7,9 +7,10 @@ interface CountdownTimerProps {
   totalSeconds: number
   onExpire: () => void
   onTick?: (remaining: number) => void
+  hideIcon?: boolean
 }
 
-export default function CountdownTimer({ totalSeconds, onExpire, onTick }: CountdownTimerProps) {
+export default function CountdownTimer({ totalSeconds, onExpire, onTick, hideIcon }: CountdownTimerProps) {
   const [remaining, setRemaining] = useState(totalSeconds)
   const expiredRef = useRef(false)
   // Keep callback refs stable so the tick interval never restarts unnecessarily
@@ -49,12 +50,14 @@ export default function CountdownTimer({ totalSeconds, onExpire, onTick }: Count
         ? 'text-[var(--q-sherbert-500)]'
         : 'text-[var(--q-twilight-500)]',
     ].join(' ')}>
-      <span
-        className="material-symbols-rounded"
-        style={{ fontSize: 18, fontVariationSettings: "'FILL' 1" }}
-      >
-        schedule
-      </span>
+      {!hideIcon && (
+        <span
+          className="material-symbols-rounded"
+          style={{ fontSize: 18, fontVariationSettings: "'FILL' 1" }}
+        >
+          schedule
+        </span>
+      )}
       {formatTime(remaining)}
     </div>
   )

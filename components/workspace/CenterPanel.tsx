@@ -202,7 +202,7 @@ function IdleState() {
 
           {/* Text block — hugs content */}
           <div className="relative flex flex-col items-center gap-[var(--q-space-8)]">
-            <h2 className="q-h2 text-[var(--q-text-primary)]">Writing by Quizlet</h2>
+                <h2 className="q-h2 text-[var(--q-text-primary)]">Write by Quizlet</h2>
 
             <p className="q-sh2 text-[var(--q-text-secondary)]">
               Add some{' '}
@@ -253,7 +253,7 @@ function IdleState() {
               {/* Title */}
               <div className="flex flex-col items-center gap-[var(--q-space-8)] text-center">
                 <img src="/brand-write.png" alt="" style={{ width: 48, height: 48 }} className="object-contain" />
-                <h2 className="q-h2 text-[var(--q-text-primary)]">Writing by Quizlet</h2>
+                <h2 className="q-h2 text-[var(--q-text-primary)]">Write by Quizlet</h2>
                 <p className="q-sh3 text-[var(--q-text-secondary)]">Customize your time limit and prompt type</p>
               </div>
 
@@ -823,6 +823,7 @@ function FeedbackState() {
   const cardRefs = useRef<Record<string, HTMLElement | null>>({})
   const rightPanelRef = useRef<HTMLDivElement | null>(null)
   const leftPanelRef = useRef<HTMLDivElement | null>(null)
+  const [hoveredCompDimKey, setHoveredCompDimKey] = useState<string | null>(null)
   const [isPendingScratchPad, setIsPendingScratchPad] = useState(false)
   const [pendingScratchPadText, setPendingScratchPadText] = useState('')
   const [isPendingExpanded, setIsPendingExpanded] = useState(false)
@@ -838,7 +839,7 @@ function FeedbackState() {
     { text: responseText, feedback: feedbackV1 },
     ...rewriteVersions.filter(v => v.text?.trim() && v.feedback?.dimensions),
   ]
-  const showTabs = allVersions.length > 1 || activeTab === 'writing'
+  const showTabs = allVersions.length > 1
   const activeResponseNum = typeof activeTab === 'number' ? activeTab : 1
 
   // Right column shows feedback for the active response tab
@@ -972,7 +973,7 @@ function FeedbackState() {
 
       {/* Tab bar */}
       {showTabs && (
-        <div className="flex-shrink-0 px-[var(--q-space-6)] pt-[var(--q-space-24)] pb-[var(--q-space-4)] flex items-center gap-[var(--q-space-8)]">
+        <div className="flex-shrink-0 pl-[var(--q-space-32)] pr-[var(--q-space-8)] pt-[var(--q-space-24)] pb-[var(--q-space-4)] flex items-center gap-[var(--q-space-8)]">
           {allVersions.length >= 2 && (
             <button onClick={() => setActiveTab('comparison')} className={tabCls('comparison')}>Comparison</button>
           )}
@@ -986,11 +987,12 @@ function FeedbackState() {
       )}
 
       {/* Body */}
-      <div className={typeof activeTab === 'number' ? 'flex-1 overflow-hidden flex' : 'flex-1 overflow-y-auto scrollbar-hide'}>
+      <div className={typeof activeTab === 'number' ? 'flex-1 overflow-hidden flex' : 'flex-1 overflow-y-auto scrollbar-hide'}
+        style={typeof activeTab !== 'number' ? { maskImage: 'linear-gradient(to bottom, transparent 0, black 32px, black 100%)', WebkitMaskImage: 'linear-gradient(to bottom, transparent 0, black 32px, black 100%)' } : undefined}>
 
         {/* ── Comparison view ── */}
         {activeTab === 'comparison' && (
-          <div className="flex-1 bg-[var(--q-surface-base)] overflow-hidden flex gap-[var(--q-space-16)] px-[var(--q-space-24)] py-[var(--q-space-24)]">
+          <div className="flex-1 bg-[var(--q-surface-base)] overflow-hidden flex gap-[var(--q-space-16)] px-[var(--q-space-32)] py-[var(--q-space-24)]">
             {allVersions.map((v, i) => {
               const score = computeTotalScore(v.feedback?.dimensions as Parameters<typeof computeTotalScore>[0])
               const prevScore = i > 0 ? computeTotalScore(allVersions[i - 1].feedback?.dimensions as Parameters<typeof computeTotalScore>[0]) : null
@@ -1013,7 +1015,7 @@ function FeedbackState() {
                   </div>
 
                   {/* Dimension rows */}
-                  <div className="px-[var(--q-space-20)] flex flex-col flex-shrink-0 border-b border-[var(--q-border-primary)]">
+                  <div className="px-[var(--q-space-20)] flex flex-col flex-shrink-0">
                     {DIMENSIONS.map(d => {
                       const dims = v.feedback?.dimensions as unknown as Record<string, { score: number }> | undefined
                       const dimScore = toDisplayScore(dims?.[d.key]?.score ?? 0)
@@ -1022,12 +1024,18 @@ function FeedbackState() {
                       const dimDelta = prevDimScore !== null ? dimScore - prevDimScore : null
                       const dimColors = getDimensionColors(dimScore)
                       const isWeak = dimScore < 18
+                      const isHovered = hoveredCompDimKey === d.key
+                      const isDimmed = hoveredCompDimKey !== null && !isHovered
                       return (
-                        <div key={d.key} className="flex items-center justify-between py-[var(--q-space-8)] border-t border-[var(--q-border-primary)]">
+                        <div key={d.key} className="flex items-center justify-between py-[var(--q-space-8)] border-t border-[var(--q-border-primary)] transition-opacity duration-150"
+                          style={{ opacity: isDimmed ? 0.3 : 1 }}>
                           <p className="q-sh4" style={{ color: isWeak ? dimColors.text : 'var(--q-text-muted)' }}>{d.name}</p>
                           <div className="flex items-center gap-[var(--q-space-6)]">
                             {dimDelta !== null && dimDelta > 0 && (
                               <span className="q-sh5 rounded-[var(--q-radius-full)] px-[var(--q-space-6)] py-[var(--q-space-2)] bg-[var(--q-mint-100)] text-[var(--q-text-success)]">+{dimDelta}</span>
+                            )}
+                            {dimDelta !== null && dimDelta < 0 && (
+                              <span className="q-sh5 rounded-[var(--q-radius-full)] px-[var(--q-space-6)] py-[var(--q-space-2)] bg-[var(--q-sherbert-100)] text-[var(--q-text-warning)]">{dimDelta}</span>
                             )}
                             <p className="q-sh4" style={{ color: isWeak ? dimColors.text : 'var(--q-text-muted)' }}>{dimScore}/20</p>
                           </div>
@@ -1037,7 +1045,7 @@ function FeedbackState() {
                   </div>
 
                   {/* Response text with highlights */}
-                  <div className="flex-1 overflow-y-auto scrollbar-hide px-[var(--q-space-20)] py-[var(--q-space-16)]"
+                  <div className="flex-1 overflow-y-auto scrollbar-hide px-[var(--q-space-20)] pt-[var(--q-space-16)] pb-[var(--q-space-16)] border-t border-[var(--q-border-primary)]"
                     style={{ maskImage: 'linear-gradient(to bottom, black 85%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to bottom, black 85%, transparent 100%)' }}>
                     <p className="q-b4 text-[var(--q-text-primary)] leading-relaxed whitespace-pre-wrap">
                       {segs.map((seg, si) => {
@@ -1049,7 +1057,9 @@ function FeedbackState() {
                         if (ds >= 18) return <span key={si}>{seg.text}</span>
                         return (
                           <mark key={si} className="cursor-pointer transition-colors rounded-sm"
-                            style={{ backgroundColor: c.highlight, '--mark-hover-bg': c.hoverHighlight } as React.CSSProperties}>
+                            style={{ backgroundColor: c.highlight, '--mark-hover-bg': c.hoverHighlight } as React.CSSProperties}
+                            onMouseEnter={() => setHoveredCompDimKey(seg.key!)}
+                            onMouseLeave={() => setHoveredCompDimKey(null)}>
                             {seg.text}
                           </mark>
                         )

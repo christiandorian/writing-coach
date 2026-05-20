@@ -11,7 +11,6 @@ export default function AuthPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [showEmail, setShowEmail] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isSignUp, setIsSignUp] = useState(false)
@@ -100,48 +99,45 @@ export default function AuthPage() {
 
         {/* Title block */}
         <div className="flex flex-col gap-[var(--q-space-8)] items-center text-center w-full">
-          <p className="q-h2 text-[var(--q-text-primary)]">
-            Writing by Quizlet
-          </p>
-          <p className="q-sh2 text-[var(--q-text-secondary)]">
-            Write better under pressure
-          </p>
+          <p className="q-h2 text-[var(--q-text-primary)]">Write by Quizlet</p>
+          <p className="q-sh3 text-[var(--q-text-secondary)]">Structure and write better essays under pressure</p>
         </div>
 
-        {/* Google SSO */}
-        <button
-          onClick={handleGoogle}
-          disabled={loading}
-          className="flex items-center justify-center gap-[var(--q-space-8)] bg-[var(--q-btn-tertiary-bg)] hover:bg-[var(--q-btn-tertiary-bg-hover)] active:bg-[var(--q-btn-tertiary-bg-press)] text-[var(--q-btn-tertiary-fg)] disabled:opacity-50 transition-colors px-[var(--q-space-24)] py-[var(--q-space-12)] q-sh3 w-full"
-          style={{ borderRadius: 'var(--q-radius-full)' }}
-        >
-          {loading && !showEmail ? (
-            <span className="w-5 h-5 border-2 border-[var(--q-gray-400)] border-t-[var(--q-twilight-500)] rounded-full animate-spin" />
-          ) : <GoogleIcon />}
-          Continue with Google
-        </button>
-
-        {/* Email fallback */}
-        {!showEmail ? (
-          <button onClick={() => setShowEmail(true)} className="q-sh3 text-[var(--q-text-secondary)] hover:text-[var(--q-text-primary)] transition-colors">
-            Sign in with email instead
+        {/* Auth form */}
+        <div className="flex flex-col gap-[var(--q-space-32)] items-center w-full">
+          {/* Google SSO */}
+          <button
+            onClick={handleGoogle}
+            disabled={loading}
+            className="flex items-center justify-center gap-[var(--q-space-8)] bg-[var(--q-btn-tertiary-bg)] hover:bg-[var(--q-btn-tertiary-bg-hover)] text-[var(--q-btn-tertiary-fg)] disabled:opacity-50 transition-colors px-[var(--q-space-24)] py-[var(--q-space-12)] q-sh3 w-full"
+            style={{ borderRadius: 'var(--q-radius-full)' }}
+          >
+            {loading && !email ? (
+              <span className="w-5 h-5 border-2 border-[var(--q-gray-400)] border-t-[var(--q-twilight-500)] rounded-full animate-spin" />
+            ) : <GoogleIcon />}
+            Continue with Google
           </button>
-        ) : (
-          <form onSubmit={handleEmail} className="w-full space-y-[var(--q-space-12)]">
+
+          {/* Email + Password form */}
+          <form onSubmit={handleEmail} className="w-full flex flex-col gap-[var(--q-space-12)]">
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" required
-              className="w-full bg-[var(--q-surface-bg)] border border-[var(--q-border-primary)] rounded-[var(--q-radius-md)] text-[var(--q-text-primary)] px-[var(--q-space-16)] py-[var(--q-space-10)] q-b4 focus:outline-none focus:ring-2 focus:ring-[var(--q-twilight-300)] focus:border-transparent" />
+              className="w-full bg-[var(--q-surface-bg)] text-[var(--q-text-primary)] placeholder-[var(--q-text-muted)] px-[var(--q-space-20)] q-sh3 focus:outline-none focus:ring-2 focus:ring-[var(--q-twilight-300)]"
+              style={{ borderRadius: 'var(--q-radius-full)', paddingTop: 14, paddingBottom: 14 }} />
             <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" required minLength={6}
-              className="w-full bg-[var(--q-surface-bg)] border border-[var(--q-border-primary)] rounded-[var(--q-radius-md)] text-[var(--q-text-primary)] px-[var(--q-space-16)] py-[var(--q-space-10)] q-b4 focus:outline-none focus:ring-2 focus:ring-[var(--q-twilight-300)] focus:border-transparent" />
+              className="w-full bg-[var(--q-surface-bg)] text-[var(--q-text-primary)] placeholder-[var(--q-text-muted)] px-[var(--q-space-20)] q-sh3 focus:outline-none focus:ring-2 focus:ring-[var(--q-twilight-300)]"
+              style={{ borderRadius: 'var(--q-radius-full)', paddingTop: 14, paddingBottom: 14 }} />
             <button type="submit" disabled={loading}
-              className="w-full bg-[var(--q-btn-primary-bg)] hover:bg-[var(--q-btn-primary-bg-hover)] text-white disabled:opacity-50 transition-colors px-[var(--q-space-24)] py-[var(--q-space-12)] q-sh3"
-              style={{ borderRadius: 'var(--q-radius-full)' }}>
+              className="w-full bg-[var(--q-btn-primary-bg)] hover:bg-[var(--q-btn-primary-bg-hover)] text-white disabled:opacity-50 transition-colors px-[var(--q-space-24)] q-sh3"
+              style={{ borderRadius: 'var(--q-radius-full)', paddingTop: 14, paddingBottom: 14 }}>
               {loading ? <span className="flex items-center justify-center gap-2"><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Loading...</span> : isSignUp ? 'Create account' : 'Sign in'}
             </button>
-            <button type="button" onClick={() => setIsSignUp((v) => !v)} className="q-b5 text-[var(--q-text-muted)] hover:text-[var(--q-text-secondary)] transition-colors w-full text-center">
-              {isSignUp ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
-            </button>
           </form>
-        )}
+
+          {/* Toggle sign-up / sign-in */}
+          <button type="button" onClick={() => setIsSignUp((v) => !v)} className="q-sh5 text-[var(--q-text-secondary)] hover:text-[var(--q-text-primary)] transition-colors text-center">
+            {isSignUp ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
+          </button>
+        </div>
 
         {error && <p className="q-b5 text-[var(--q-text-error)] text-center">{error}</p>}
         {message && <p className="q-b5 text-[var(--q-mint-600)] text-center">{message}</p>}

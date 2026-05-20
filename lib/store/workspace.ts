@@ -17,7 +17,7 @@ export interface Source {
   content: string     // extracted text for AI prompt generation
   dataUrl?: string    // object URL for preview (rebuilt from fileData on load)
   fileData?: string   // base64 for binary files — persisted to DB
-  type: 'text' | 'pdf'
+  type: 'text' | 'pdf' | 'quizlet'
   selected: boolean
   tags?: string[]     // AI-generated concept tags (in-memory, not persisted)
 }

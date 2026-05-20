@@ -6,6 +6,8 @@ import type { Source } from '@/lib/store/workspace'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import { createClient } from '@/lib/supabase/client'
+import SourceSearchModal from '@/components/workspace/SourceSearchModal'
+import type { QuizletSet } from '@/app/api/quizlet-search/route'
 
 export default function LeftRail({ sourcesLoading = false }: { sourcesLoading?: boolean }) {
   const { sources, addSource, toggleSource, removeSource, setSourceTags } = useWorkspaceStore()
@@ -15,6 +17,7 @@ export default function LeftRail({ sourcesLoading = false }: { sourcesLoading?: 
   const [dragging, setDragging] = useState(false)
   const [addMenuOpen, setAddMenuOpen] = useState(false)
   const [pasteModalOpen, setPasteModalOpen] = useState(false)
+  const [searchModalOpen, setSearchModalOpen] = useState(false)
   const [textName, setTextName] = useState('')
   const [textContent, setTextContent] = useState('')
   const [loadingFile, setLoadingFile] = useState(false)
@@ -61,6 +64,13 @@ export default function LeftRail({ sourcesLoading = false }: { sourcesLoading?: 
       const { tags } = await res.json()
       if (Array.isArray(tags) && tags.length > 0) setSourceTags(id, tags)
     } catch {}
+  }
+
+  const handleAddQuizletSet = (set: QuizletSet, terms: import('@/app/api/quizlet-set/route').FlashcardTerm[]) => {
+    const termLines = terms.length > 0
+      ? terms.map(t => `${t.term}: ${t.definition}`).join('\n')
+      : `${set.title} — ${set.termCount} terms by ${set.author}`
+    addSource({ name: set.title, content: termLines, type: 'quizlet' })
   }
 
   const handleFile = async (file: File) => {
@@ -197,7 +207,7 @@ export default function LeftRail({ sourcesLoading = false }: { sourcesLoading?: 
             )}
           </div>
 
-          <Button variant="text-secondary" size="medium" circle onClick={() => fileRef.current?.click()} title="Upload file">
+          <Button variant="text-secondary" size="medium" circle onClick={() => setSearchModalOpen(true)} title="Search Quizlet">
             <span className="material-symbols-rounded" style={{ fontSize: 20 }}>search</span>
           </Button>
         </div>
@@ -312,6 +322,13 @@ export default function LeftRail({ sourcesLoading = false }: { sourcesLoading?: 
         )}
       </div>
 
+
+      {/* Quizlet search modal */}
+      <SourceSearchModal
+        open={searchModalOpen}
+        onClose={() => setSearchModalOpen(false)}
+        onAdd={handleAddQuizletSet}
+      />
 
       {/* Paste text modal */}
       <Modal
@@ -456,10 +473,12 @@ function SourceItem({ source, loading = false, onToggle, onRemove }: { source: S
         {/* Thumbnail */}
         <div
           className="flex-shrink-0 w-10 h-10 rounded-[var(--q-radius-md)] flex items-center justify-center overflow-hidden"
-          style={{ backgroundColor: '#EDEFF4' }}
+          style={{ backgroundColor: source.type === 'quizlet' ? '#eaf9ff' : '#EDEFF4' }}
         >
           {loading ? (
             <span className="w-5 h-5 border-2 border-[var(--q-gray-400)] border-t-[var(--q-twilight-500)] rounded-full animate-spin" />
+          ) : source.type === 'quizlet' ? (
+            <img src="/set.png" alt="" className="w-6 h-6 object-contain" />
           ) : (
             <span className="material-symbols-rounded" style={{ fontSize: 24, color: '#586380' }}>
               {source.type === 'pdf'
@@ -475,7 +494,9 @@ function SourceItem({ source, loading = false, onToggle, onRemove }: { source: S
             {source.type === 'text' ? source.content : source.name}
           </p>
           <p className="q-sh5 text-[var(--q-text-secondary)]">
-            {source.type === 'text'
+            {source.type === 'quizlet'
+              ? 'Flashcards'
+              : source.type === 'text'
               ? 'Pasted text'
               : source.name?.split('.').pop()?.toUpperCase() ?? 'PDF'}
           </p>
@@ -538,7 +559,7 @@ function SourceItem({ source, loading = false, onToggle, onRemove }: { source: S
       </div>
 
       {/* View source modal */}
-      <Modal open={viewOpen} onClose={() => setViewOpen(false)} title={source.type === 'text' ? 'Pasted text' : source.name} maxWidth={source.dataUrl ? 620 : 480}>
+      <Modal open={viewOpen} onClose={() => setViewOpen(false)} title={source.name || (source.type === 'text' ? 'Pasted text' : source.name)} maxWidth={source.dataUrl ? 620 : 480}>
         <SourceTagsDisplay tags={source.tags} loading={tagsLoading} />
         {source.dataUrl ? (
           source.name?.match(/\.(png|jpg|jpeg|gif|webp)$/i) ? (

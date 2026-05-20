@@ -919,12 +919,8 @@ function FeedbackState() {
 
   const toggleDimension = (key: string) => {
     const willOpen = !openDimensions.has(key)
-    setOpenDimensions(prev => {
-      const next = new Set(Array.from(prev))
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
-      return next
-    })
+    // Single-open: opening one collapses all others
+    setOpenDimensions(willOpen ? new Set([key]) : new Set())
     setActiveDimension(willOpen ? key : (activeDimension === key ? null : activeDimension))
     if (willOpen) {
       setOverallOpen(false)
@@ -976,7 +972,7 @@ function FeedbackState() {
 
       {/* Tab bar */}
       {showTabs && (
-        <div className="flex-shrink-0 px-[var(--q-space-6)] pt-[var(--q-space-16)] pb-[var(--q-space-4)] flex items-center gap-[var(--q-space-8)]">
+        <div className="flex-shrink-0 px-[var(--q-space-6)] pt-[var(--q-space-24)] pb-[var(--q-space-4)] flex items-center gap-[var(--q-space-8)]">
           {allVersions.length >= 2 && (
             <button onClick={() => setActiveTab('comparison')} className={tabCls('comparison')}>Comparison</button>
           )}
@@ -994,61 +990,75 @@ function FeedbackState() {
 
         {/* ── Comparison view ── */}
         {activeTab === 'comparison' && (
-          <div className="flex-1 bg-[var(--q-surface-base)] flex flex-col items-center px-[var(--q-space-24)] py-[var(--q-space-32)] gap-[var(--q-space-8)]">
-            <ComparisonChart versions={allVersions} />
+          <div className="flex-1 bg-[var(--q-surface-base)] overflow-hidden flex gap-[var(--q-space-16)] px-[var(--q-space-24)] py-[var(--q-space-24)]">
+            {allVersions.map((v, i) => {
+              const score = computeTotalScore(v.feedback?.dimensions as Parameters<typeof computeTotalScore>[0])
+              const prevScore = i > 0 ? computeTotalScore(allVersions[i - 1].feedback?.dimensions as Parameters<typeof computeTotalScore>[0]) : null
+              const delta = prevScore !== null ? score - prevScore : null
+              const scoreColor = score >= 80 ? 'var(--q-text-success)' : 'var(--q-text-warning)'
+              const segs = getVersionSegments(v)
+              return (
+                <div key={i} className="flex-1 flex flex-col rounded-[var(--q-radius-xl)] bg-[var(--q-surface-bg)] overflow-hidden"
+                  style={{ boxShadow: '0 4px 0 0 rgba(66,85,255,0.15), 0 -1px 0 0 #EDEFFF' }}>
 
-            {/* Side-by-side response stats */}
-            <div className="w-full pt-[var(--q-space-8)]">
-              {/* Header row: response labels + overall scores */}
-              <div className="flex gap-[var(--q-space-16)] pb-[var(--q-space-16)] border-b border-[var(--q-border-primary)]">
-                <div className="w-[140px] flex-shrink-0" />
-                {allVersions.map((v, i) => {
-                  const score = computeTotalScore(v.feedback?.dimensions as Parameters<typeof computeTotalScore>[0])
-                  const prevScore = i > 0 ? computeTotalScore(allVersions[i - 1].feedback?.dimensions as Parameters<typeof computeTotalScore>[0]) : null
-                  const delta = prevScore !== null ? score - prevScore : null
-                  return (
-                    <div key={i} className="flex-1 flex flex-col gap-[var(--q-space-2)]">
-                      <p className="q-sh5 text-[var(--q-text-muted)]">Response {i + 1}</p>
-                      <div className="flex items-baseline gap-[var(--q-space-6)]">
-                        <p className="q-h4 text-[var(--q-text-primary)]">{score}</p>
-                        {delta !== null && (
-                          <span className="q-sh5" style={{ color: delta > 0 ? 'var(--q-text-success)' : delta < 0 ? 'var(--q-text-warning)' : 'var(--q-text-muted)' }}>
-                            {delta > 0 ? `↑${delta}` : delta < 0 ? `↓${Math.abs(delta)}` : '—'}
-                          </span>
-                        )}
-                      </div>
+                  {/* Card header: label + overall score */}
+                  <div className="px-[var(--q-space-20)] pt-[var(--q-space-20)] pb-[var(--q-space-12)] flex items-center justify-between flex-shrink-0">
+                    <p className="q-sh3 text-[var(--q-text-primary)]">Response {i + 1}</p>
+                    <div className="flex items-center gap-[var(--q-space-4)]">
+                      {delta !== null && delta > 0 && (
+                        <span className="material-symbols-rounded" style={{ fontSize: 16, color: 'var(--q-text-success)' }}>arrow_upward</span>
+                      )}
+                      <p className="q-h3" style={{ color: scoreColor }}>{score}%</p>
                     </div>
-                  )
-                })}
-              </div>
-
-              {/* Dimension rows */}
-              {DIMENSIONS.map(d => (
-                <div key={d.key} className="flex gap-[var(--q-space-16)] py-[var(--q-space-10)] border-b border-[var(--q-border-primary)]">
-                  <div className="w-[140px] flex-shrink-0">
-                    <p className="q-sh5 text-[var(--q-text-secondary)]">{d.name}</p>
                   </div>
-                  {allVersions.map((v, vi) => {
-                    const dims = v.feedback?.dimensions as unknown as Record<string, { score: number }> | undefined
-                    const dimScore = toDisplayScore(dims?.[d.key]?.score ?? 0)
-                    const prevDims = vi > 0 ? (allVersions[vi - 1].feedback?.dimensions as unknown as Record<string, { score: number }> | undefined) : null
-                    const prevDimScore = prevDims ? toDisplayScore(prevDims[d.key]?.score ?? 0) : null
-                    const dimDelta = prevDimScore !== null ? dimScore - prevDimScore : null
-                    const dimColors = getDimensionColors(dimScore)
-                    return (
-                      <div key={vi} className="flex-1 flex items-center gap-[var(--q-space-6)]">
-                        <span className="q-sh4" style={{ color: dimColors.text }}>{dimScore}/20</span>
-                        {dimDelta !== null && dimDelta !== 0 && (
-                          <span className="q-sh5" style={{ color: dimDelta > 0 ? 'var(--q-text-success)' : 'var(--q-text-warning)' }}>
-                            {dimDelta > 0 ? `↑${dimDelta}` : `↓${Math.abs(dimDelta)}`}
-                          </span>
-                        )}
-                      </div>
-                    )
-                  })}
+
+                  {/* Dimension rows */}
+                  <div className="px-[var(--q-space-20)] flex flex-col flex-shrink-0 border-b border-[var(--q-border-primary)]">
+                    {DIMENSIONS.map(d => {
+                      const dims = v.feedback?.dimensions as unknown as Record<string, { score: number }> | undefined
+                      const dimScore = toDisplayScore(dims?.[d.key]?.score ?? 0)
+                      const prevDims = i > 0 ? (allVersions[i - 1].feedback?.dimensions as unknown as Record<string, { score: number }> | undefined) : null
+                      const prevDimScore = prevDims ? toDisplayScore(prevDims[d.key]?.score ?? 0) : null
+                      const dimDelta = prevDimScore !== null ? dimScore - prevDimScore : null
+                      const dimColors = getDimensionColors(dimScore)
+                      const isWeak = dimScore < 18
+                      return (
+                        <div key={d.key} className="flex items-center justify-between py-[var(--q-space-8)] border-t border-[var(--q-border-primary)]">
+                          <p className="q-sh4" style={{ color: isWeak ? dimColors.text : 'var(--q-text-muted)' }}>{d.name}</p>
+                          <div className="flex items-center gap-[var(--q-space-6)]">
+                            {dimDelta !== null && dimDelta > 0 && (
+                              <span className="q-sh5 rounded-[var(--q-radius-full)] px-[var(--q-space-6)] py-[var(--q-space-2)] bg-[var(--q-mint-100)] text-[var(--q-text-success)]">+{dimDelta}</span>
+                            )}
+                            <p className="q-sh4" style={{ color: isWeak ? dimColors.text : 'var(--q-text-muted)' }}>{dimScore}/20</p>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {/* Response text with highlights */}
+                  <div className="flex-1 overflow-y-auto scrollbar-hide px-[var(--q-space-20)] py-[var(--q-space-16)]"
+                    style={{ maskImage: 'linear-gradient(to bottom, black 85%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to bottom, black 85%, transparent 100%)' }}>
+                    <p className="q-b4 text-[var(--q-text-primary)] leading-relaxed whitespace-pre-wrap">
+                      {segs.map((seg, si) => {
+                        if (!seg.key) return <span key={si}>{seg.text}</span>
+                        const dims2 = v.feedback?.dimensions as unknown as Record<string, { score: number }> | undefined
+                        const ds = toDisplayScore(dims2?.[seg.key]?.score ?? 0)
+                        const c = getDimensionColors(ds)
+                        // Only show highlights for warning-tier (weak) dimensions; suppress success/green
+                        if (ds >= 18) return <span key={si}>{seg.text}</span>
+                        return (
+                          <mark key={si} className="cursor-pointer transition-colors rounded-sm"
+                            style={{ backgroundColor: c.highlight, '--mark-hover-bg': c.hoverHighlight } as React.CSSProperties}>
+                            {seg.text}
+                          </mark>
+                        )
+                      })}
+                    </p>
+                  </div>
                 </div>
-              ))}
-            </div>
+              )
+            })}
           </div>
         )}
 
@@ -1127,7 +1137,7 @@ function FeedbackState() {
 
         {/* ── Response view (left column) ── */}
         {typeof activeTab === 'number' && (
-          <div ref={leftPanelRef} className="flex-1 min-w-0 overflow-y-auto bg-[var(--q-surface-base)] px-[var(--q-space-6)] py-[var(--q-space-24)] flex flex-col gap-[var(--q-space-12)] scrollbar-hide" style={{ maskImage: 'linear-gradient(to bottom, transparent 0, black 28px, black 100%)', WebkitMaskImage: 'linear-gradient(to bottom, transparent 0, black 28px, black 100%)' }}>
+          <div ref={leftPanelRef} className="flex-1 min-w-0 overflow-y-auto bg-[var(--q-surface-base)] pl-[var(--q-space-32)] pr-[var(--q-space-8)] py-[var(--q-space-24)] flex flex-col gap-[var(--q-space-12)] scrollbar-hide" style={{ maskImage: 'linear-gradient(to bottom, transparent 0, black 28px, black 100%)', WebkitMaskImage: 'linear-gradient(to bottom, transparent 0, black 28px, black 100%)' }}>
 
           {PromptCard}
 
@@ -1167,7 +1177,7 @@ function FeedbackState() {
           {/* Overall score card */}
           <div
             className="rounded-[var(--q-radius-xl)] border-2 bg-[var(--q-surface-base)] overflow-hidden flex-shrink-0"
-            style={{ borderColor: versionPending ? 'var(--q-border-primary)' : 'var(--q-twilight-100)' }}
+            style={{ borderColor: versionPending ? 'var(--q-border-primary)' : overallOpen ? 'var(--q-twilight-300)' : 'var(--q-twilight-100)' }}
           >
             <div
               onClick={() => {

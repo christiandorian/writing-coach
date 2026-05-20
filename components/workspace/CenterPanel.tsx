@@ -476,7 +476,7 @@ function PromptWritingState() {
             {/* Header — always at the same position, never moves */}
             <div className="flex items-center gap-[var(--q-space-8)] px-[var(--q-space-24)] py-[var(--q-space-16)] justify-between">
               <div className="flex items-center gap-[var(--q-space-8)] min-w-0 flex-1">
-                <span className="inline-flex items-center flex-shrink-0 q-sh5 text-[var(--q-surface-base)] bg-[var(--q-text-primary)] px-[var(--q-space-12)] py-[var(--q-space-4)] rounded-[var(--q-radius-full)]">
+                <span className="inline-flex items-center flex-shrink-0 q-sh5 text-[var(--q-surface-base)] bg-[var(--q-gray-600)] px-[var(--q-space-12)] py-[var(--q-space-4)] rounded-[var(--q-radius-full)]">
                   Prompt
                 </span>
                 <AnimatePresence mode="popLayout">
@@ -703,32 +703,63 @@ function SubmittingState() {
 
 function ComparisonChart({ versions }: { versions: Array<{ feedback: { dimensions?: unknown } | null }> }) {
   const scores = versions.map((v, i) => ({ n: i + 1, score: computeTotalScore(v.feedback?.dimensions as Parameters<typeof computeTotalScore>[0]) }))
-  const svgW = 480, svgH = 280
-  const pl = 52, pr = 24, pt = 36, pb = 48
+  const svgW = 520, svgH = 260
+  const pl = 36, pr = 24, pt = 28, pb = 44
   const chartW = svgW - pl - pr
   const chartH = svgH - pt - pb
   const N = scores.length
-  const getX = (i: number) => pl + (N === 1 ? chartW / 2 : i * chartW / (N - 1))
+
+  const innerPadX = 48
+  const plotW = chartW - 2 * innerPadX
+  const getX = (i: number) => pl + innerPadX + (N === 1 ? plotW / 2 : i * plotW / (N - 1))
   const getY = (s: number) => pt + chartH - (s / 100) * chartH
-  const pathD = scores.map((s, i) => `${i === 0 ? 'M' : 'L'} ${getX(i).toFixed(1)} ${getY(s.score).toFixed(1)}`).join(' ')
+
+  // Smooth cubic bezier path
+  const linePath = scores.map((s, i) => {
+    if (i === 0) return `M ${getX(0).toFixed(1)},${getY(s.score).toFixed(1)}`
+    const x0 = getX(i - 1), y0 = getY(scores[i - 1].score)
+    const x1 = getX(i), y1 = getY(s.score)
+    const cpx = ((x0 + x1) / 2).toFixed(1)
+    return `C ${cpx},${y0.toFixed(1)} ${cpx},${y1.toFixed(1)} ${x1.toFixed(1)},${y1.toFixed(1)}`
+  }).join(' ')
+
+  const fillPath = N > 1
+    ? `${linePath} L ${getX(N - 1).toFixed(1)},${(pt + chartH).toFixed(1)} L ${getX(0).toFixed(1)},${(pt + chartH).toFixed(1)} Z`
+    : ''
+
   const yTicks = [0, 25, 50, 75, 100]
+  const gradId = 'cmpFill'
+
   return (
-    <svg width={svgW} height={svgH} viewBox={`0 0 ${svgW} ${svgH}`} style={{ overflow: 'visible', maxWidth: '100%' }}>
-      {/* Y grid + labels */}
-      {yTicks.map(y => (
-        <g key={y}>
-          <line x1={pl} y1={getY(y)} x2={svgW - pr} y2={getY(y)} stroke="var(--q-border-primary)" strokeWidth="1" />
-          <text x={pl - 8} y={getY(y) + 4} textAnchor="end" fontSize="11" fill="var(--q-text-muted)">{y}</text>
-        </g>
-      ))}
-      {/* Connecting line */}
-      {N > 1 && <path d={pathD} stroke="var(--q-twilight-400)" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />}
-      {/* Points + labels */}
+    <svg width="100%" height={svgH} viewBox={`0 0 ${svgW} ${svgH}`} preserveAspectRatio="xMidYMid meet" style={{ overflow: 'visible' }}>
+      <defs>
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="var(--q-twilight-400)" stopOpacity="0.22" />
+          <stop offset="100%" stopColor="var(--q-twilight-400)" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+
+      {/* Dashed horizontal grid lines + Y labels */}
+
+      {/* Y-axis min/max labels */}
+      <text x={pl - 6} y={getY(100) + 4} textAnchor="end" fontSize="11" fill="var(--q-text-muted)">100</text>
+      <text x={pl - 6} y={getY(0) + 4} textAnchor="end" fontSize="11" fill="var(--q-text-muted)">0</text>
+
+      {/* Gradient fill */}
+      {N > 1 && <path d={fillPath} fill={`url(#${gradId})`} />}
+
+      {/* Smooth line */}
+      {N > 1 && <path d={linePath} stroke="var(--q-twilight-500)" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />}
+
+      {/* Points + score labels + x-axis labels */}
       {scores.map((s, i) => (
         <g key={i}>
-          <circle cx={getX(i)} cy={getY(s.score)} r="7" fill="var(--q-twilight-500)" />
+          {/* Score above */}
           <text x={getX(i)} y={getY(s.score) - 14} textAnchor="middle" fontSize="13" fontWeight="600" fill="var(--q-text-primary)">{s.score}</text>
-          <text x={getX(i)} y={svgH - pb + 20} textAnchor="middle" fontSize="12" fill="var(--q-text-secondary)">Response {s.n}</text>
+          {/* White-fill circle with border */}
+          <circle cx={getX(i)} cy={getY(s.score)} r="6" fill="white" stroke="var(--q-twilight-500)" strokeWidth="2.5" />
+          {/* X label */}
+          <text x={getX(i)} y={svgH - 4} textAnchor="middle" fontSize="11" fill="var(--q-text-secondary)">Response {s.n}</text>
         </g>
       ))}
     </svg>
@@ -790,6 +821,8 @@ function FeedbackState() {
   const [openDimensions, setOpenDimensions] = useState<Set<string>>(new Set())
   const highlightRefs = useRef<Record<string, HTMLElement | null>>({})
   const cardRefs = useRef<Record<string, HTMLElement | null>>({})
+  const rightPanelRef = useRef<HTMLDivElement | null>(null)
+  const leftPanelRef = useRef<HTMLDivElement | null>(null)
   const [isPendingScratchPad, setIsPendingScratchPad] = useState(false)
   const [pendingScratchPadText, setPendingScratchPadText] = useState('')
   const [isPendingExpanded, setIsPendingExpanded] = useState(false)
@@ -851,10 +884,29 @@ function FeedbackState() {
     const next = isActive ? null : key
     setActiveDimension(next)
     if (next) {
+      // Measure positions BEFORE state update so layout is still stable
+      const markEl = highlightRefs.current[next]
+      const cardEl = cardRefs.current[next]
+      const panel = rightPanelRef.current
+      let desiredScrollTop: number | null = null
+      if (markEl && cardEl && panel) {
+        const markTop = markEl.getBoundingClientRect().top
+        const panelRect = panel.getBoundingClientRect()
+        const cardRect = cardEl.getBoundingClientRect()
+        const cardTopInPanel = cardRect.top - panelRect.top + panel.scrollTop
+        desiredScrollTop = cardTopInPanel - (markTop - panelRect.top)
+      }
+
       // Expand only the clicked section, collapse all others (including Overall)
       setOpenDimensions(new Set([next]))
       setOverallOpen(false)
-      setTimeout(() => cardRefs.current[next]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 0)
+
+      // Scroll on the next frame so it starts simultaneously with the expansion
+      if (desiredScrollTop !== null && panel) {
+        requestAnimationFrame(() => {
+          panel.scrollTo({ top: desiredScrollTop!, behavior: 'smooth' })
+        })
+      }
     } else {
       // Clicking active highlight again — collapse that section
       setOpenDimensions(prev => {
@@ -875,15 +927,16 @@ function FeedbackState() {
     })
     setActiveDimension(willOpen ? key : (activeDimension === key ? null : activeDimension))
     if (willOpen) {
+      setOverallOpen(false)
       setTimeout(() => highlightRefs.current[key]?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0)
     }
   }
 
   const tabCls = (tab: 'comparison' | 'writing' | number) => [
-    'q-sh5 px-[var(--q-space-12)] py-[var(--q-space-6)] rounded-[var(--q-radius-full)] transition-all whitespace-nowrap flex-shrink-0',
+    'q-sh4 px-[var(--q-space-16)] py-[var(--q-space-10)] rounded-[var(--q-radius-full)] transition-all whitespace-nowrap flex-shrink-0',
     activeTab === tab
-      ? 'bg-[var(--q-twilight-100)] text-[var(--q-twilight-600)]'
-      : 'text-[var(--q-text-muted)] hover:text-[var(--q-text-secondary)] hover:bg-[var(--q-surface-bg)] cursor-pointer',
+      ? 'bg-[var(--q-twilight-100)] text-[var(--q-twilight-600)] ring-2 ring-inset ring-[var(--q-twilight-300)]'
+      : 'bg-[var(--q-btn-tertiary-bg)] text-[var(--q-text-secondary)] hover:bg-[var(--q-gray-300)] cursor-pointer',
   ].join(' ')
 
   // Shared prompt accordion used in both response and writing views
@@ -891,10 +944,10 @@ function FeedbackState() {
     <div className="rounded-[var(--q-radius-xl)] bg-[var(--q-surface-bg)] overflow-hidden flex-shrink-0">
       <div className="flex items-center gap-[var(--q-space-8)] px-[var(--q-space-24)] py-[var(--q-space-16)] justify-between cursor-pointer" onClick={() => setPromptOpen(o => !o)}>
         <div className="flex items-center gap-[var(--q-space-8)] min-w-0 flex-1">
-          <span className="inline-flex items-center flex-shrink-0 q-sh5 text-[var(--q-surface-base)] bg-[var(--q-text-primary)] px-[var(--q-space-12)] py-[var(--q-space-4)] rounded-[var(--q-radius-full)]">Prompt</span>
+          <span className="inline-flex items-center flex-shrink-0 q-sh5 text-[var(--q-surface-base)] bg-[var(--q-gray-600)] px-[var(--q-space-12)] py-[var(--q-space-4)] rounded-[var(--q-radius-full)]">Prompt</span>
           <AnimatePresence mode="popLayout">
             {!promptOpen && (
-              <motion.p key="preview" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="q-sh3 text-[var(--q-text-secondary)] truncate min-w-0 flex-1">{prompt}</motion.p>
+              <motion.p key="preview" initial={{ opacity: 0 }} animate={{ opacity: 1, transition: { duration: 0.2, delay: 0.15 } }} exit={{ opacity: 0, transition: { duration: 0.1 } }} className="q-sh4 text-[var(--q-text-secondary)] truncate min-w-0 flex-1">{prompt}</motion.p>
             )}
           </AnimatePresence>
         </div>
@@ -904,7 +957,13 @@ function FeedbackState() {
       </div>
       <AnimatePresence initial={false}>
         {promptOpen && (
-          <motion.div key="prompt-body" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.28, ease: [0.25, 0.46, 0.45, 0.94] }} className="overflow-hidden">
+          <motion.div
+            key="prompt-body"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1, transition: { height: { duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }, opacity: { duration: 0.2, delay: 0.12 } } }}
+            exit={{ height: 0, opacity: 0, transition: { opacity: { duration: 0.12 }, height: { duration: 0.28, delay: 0.08, ease: [0.55, 0, 1, 0.45] } } }}
+            className="overflow-hidden"
+          >
             <p className="q-sh3 text-[var(--q-text-primary)] leading-relaxed px-[var(--q-space-24)] pb-[var(--q-space-24)]">{prompt}</p>
           </motion.div>
         )}
@@ -913,11 +972,11 @@ function FeedbackState() {
   )
 
   return panel(
-    <div className="flex flex-col h-full bg-[var(--q-surface-bg)]">
+    <div className="flex flex-col h-full bg-[var(--q-surface-base)]">
 
       {/* Tab bar */}
       {showTabs && (
-        <div className="flex-shrink-0 px-[var(--q-space-24)] pt-[var(--q-space-16)] pb-[var(--q-space-4)] flex items-center gap-[var(--q-space-4)]">
+        <div className="flex-shrink-0 px-[var(--q-space-6)] pt-[var(--q-space-16)] pb-[var(--q-space-4)] flex items-center gap-[var(--q-space-8)]">
           {allVersions.length >= 2 && (
             <button onClick={() => setActiveTab('comparison')} className={tabCls('comparison')}>Comparison</button>
           )}
@@ -931,19 +990,71 @@ function FeedbackState() {
       )}
 
       {/* Body */}
-      <div className={['flex-1 overflow-hidden', typeof activeTab === 'number' ? 'flex' : ''].join(' ')}>
+      <div className={typeof activeTab === 'number' ? 'flex-1 overflow-hidden flex' : 'flex-1 overflow-y-auto scrollbar-hide'}>
 
         {/* ── Comparison view ── */}
         {activeTab === 'comparison' && (
-          <div className="flex-1 overflow-y-auto bg-[var(--q-surface-base)] flex flex-col items-center justify-center px-[var(--q-space-24)] py-[var(--q-space-32)] gap-[var(--q-space-8)]">
-            <p className="q-sh4 text-[var(--q-text-secondary)]">Score over responses</p>
+          <div className="flex-1 bg-[var(--q-surface-base)] flex flex-col items-center px-[var(--q-space-24)] py-[var(--q-space-32)] gap-[var(--q-space-8)]">
             <ComparisonChart versions={allVersions} />
+
+            {/* Side-by-side response stats */}
+            <div className="w-full pt-[var(--q-space-8)]">
+              {/* Header row: response labels + overall scores */}
+              <div className="flex gap-[var(--q-space-16)] pb-[var(--q-space-16)] border-b border-[var(--q-border-primary)]">
+                <div className="w-[140px] flex-shrink-0" />
+                {allVersions.map((v, i) => {
+                  const score = computeTotalScore(v.feedback?.dimensions as Parameters<typeof computeTotalScore>[0])
+                  const prevScore = i > 0 ? computeTotalScore(allVersions[i - 1].feedback?.dimensions as Parameters<typeof computeTotalScore>[0]) : null
+                  const delta = prevScore !== null ? score - prevScore : null
+                  return (
+                    <div key={i} className="flex-1 flex flex-col gap-[var(--q-space-2)]">
+                      <p className="q-sh5 text-[var(--q-text-muted)]">Response {i + 1}</p>
+                      <div className="flex items-baseline gap-[var(--q-space-6)]">
+                        <p className="q-h4 text-[var(--q-text-primary)]">{score}</p>
+                        {delta !== null && (
+                          <span className="q-sh5" style={{ color: delta > 0 ? 'var(--q-text-success)' : delta < 0 ? 'var(--q-text-warning)' : 'var(--q-text-muted)' }}>
+                            {delta > 0 ? `↑${delta}` : delta < 0 ? `↓${Math.abs(delta)}` : '—'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Dimension rows */}
+              {DIMENSIONS.map(d => (
+                <div key={d.key} className="flex gap-[var(--q-space-16)] py-[var(--q-space-10)] border-b border-[var(--q-border-primary)]">
+                  <div className="w-[140px] flex-shrink-0">
+                    <p className="q-sh5 text-[var(--q-text-secondary)]">{d.name}</p>
+                  </div>
+                  {allVersions.map((v, vi) => {
+                    const dims = v.feedback?.dimensions as unknown as Record<string, { score: number }> | undefined
+                    const dimScore = toDisplayScore(dims?.[d.key]?.score ?? 0)
+                    const prevDims = vi > 0 ? (allVersions[vi - 1].feedback?.dimensions as unknown as Record<string, { score: number }> | undefined) : null
+                    const prevDimScore = prevDims ? toDisplayScore(prevDims[d.key]?.score ?? 0) : null
+                    const dimDelta = prevDimScore !== null ? dimScore - prevDimScore : null
+                    const dimColors = getDimensionColors(dimScore)
+                    return (
+                      <div key={vi} className="flex-1 flex items-center gap-[var(--q-space-6)]">
+                        <span className="q-sh4" style={{ color: dimColors.text }}>{dimScore}/20</span>
+                        {dimDelta !== null && dimDelta !== 0 && (
+                          <span className="q-sh5" style={{ color: dimDelta > 0 ? 'var(--q-text-success)' : 'var(--q-text-warning)' }}>
+                            {dimDelta > 0 ? `↑${dimDelta}` : `↓${Math.abs(dimDelta)}`}
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
         {/* ── Writing view (Try again) ── */}
         {activeTab === 'writing' && (
-          <div className="flex-1 overflow-y-auto bg-[var(--q-surface-base)] px-[var(--q-space-24)] py-[var(--q-space-24)] flex flex-col gap-[var(--q-space-12)]">
+          <div className="flex-1 bg-[var(--q-surface-base)] px-[var(--q-space-24)] py-[var(--q-space-24)] flex flex-col gap-[var(--q-space-12)]">
             {PromptCard}
             <div className="bg-[var(--q-surface-base)] border-2 border-[var(--q-twilight-300)] rounded-[var(--q-radius-xl)] overflow-hidden flex flex-col relative flex-shrink-0">
               <div className="absolute top-[var(--q-space-8)] right-[var(--q-space-12)] flex items-center gap-[var(--q-space-8)] z-10">
@@ -1016,7 +1127,7 @@ function FeedbackState() {
 
         {/* ── Response view (left column) ── */}
         {typeof activeTab === 'number' && (
-          <div className="flex-1 min-w-0 overflow-y-auto bg-[var(--q-surface-base)] px-[var(--q-space-24)] py-[var(--q-space-24)] flex flex-col gap-[var(--q-space-12)]">
+          <div ref={leftPanelRef} className="flex-1 min-w-0 overflow-y-auto bg-[var(--q-surface-base)] px-[var(--q-space-6)] py-[var(--q-space-24)] flex flex-col gap-[var(--q-space-12)] scrollbar-hide" style={{ maskImage: 'linear-gradient(to bottom, transparent 0, black 28px, black 100%)', WebkitMaskImage: 'linear-gradient(to bottom, transparent 0, black 28px, black 100%)' }}>
 
           {PromptCard}
 
@@ -1027,7 +1138,7 @@ function FeedbackState() {
             const segs = getVersionSegments(v)
             return (
               <div className="rounded-[var(--q-radius-xl)] bg-[var(--q-surface-bg)] overflow-hidden flex-shrink-0">
-                <div className="px-[var(--q-space-20)] py-[var(--q-space-20)] max-h-[60vh] overflow-y-auto">
+                <div className="px-[var(--q-space-20)] py-[var(--q-space-20)]">
                   <p className="q-sh3 text-[var(--q-text-primary)] leading-relaxed whitespace-pre-wrap">
                     {segs.map((seg, si) => {
                       if (!seg.key) return <span key={si}>{seg.text}</span>
@@ -1050,22 +1161,29 @@ function FeedbackState() {
 
         {/* Right panel — only for response view */}
         {typeof activeTab === 'number' && (
-        <div className="w-[271px] flex-shrink-0 overflow-y-auto bg-[var(--q-surface-base)] px-[var(--q-space-12)] py-[var(--q-space-24)] flex flex-col gap-[var(--q-space-8)]">
+        <div ref={rightPanelRef} className="w-[271px] flex-shrink-0 overflow-y-auto bg-[var(--q-surface-base)] px-[var(--q-space-6)] py-[var(--q-space-24)] flex flex-col gap-[var(--q-space-12)] scrollbar-hide" style={{ maskImage: 'linear-gradient(to bottom, transparent 0, black 28px, black 100%)', WebkitMaskImage: 'linear-gradient(to bottom, transparent 0, black 28px, black 100%)' }}>
 
 
           {/* Overall score card */}
           <div
             className="rounded-[var(--q-radius-xl)] border-2 bg-[var(--q-surface-base)] overflow-hidden flex-shrink-0"
-            style={{ borderColor: versionPending ? 'var(--q-border-primary)' : 'var(--q-twilight-500)' }}
+            style={{ borderColor: versionPending ? 'var(--q-border-primary)' : 'var(--q-twilight-100)' }}
           >
             <div
-              onClick={() => !versionPending && setOverallOpen(o => !o)}
+              onClick={() => {
+                if (versionPending) return
+                setOverallOpen(o => !o)
+                setOpenDimensions(new Set())
+                setActiveDimension(null)
+                leftPanelRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+                rightPanelRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+              }}
               className={['w-full px-[var(--q-space-16)] py-[var(--q-space-16)] flex items-center justify-between', !versionPending ? 'cursor-pointer' : ''].join(' ')}
             >
               {versionPending ? (
                 <span className="q-sh4 text-[var(--q-text-muted)]">Overall — pending</span>
               ) : (
-                <span className="q-h5 text-[var(--q-twilight-600)]">Overall {totalScore}/100</span>
+                <span className="q-sh3 text-[var(--q-twilight-600)]">Overall score {totalScore}/100</span>
               )}
               {!versionPending && (
                 <Button variant="text-secondary" circle size="small" tabIndex={-1} className="bg-[var(--q-btn-tertiary-bg)]">
@@ -1094,7 +1212,7 @@ function FeedbackState() {
             const isActive = activeDimension === d.key
             const displayScore = versionPending ? null : toDisplayScore(dim.score)
             const colors = versionPending
-              ? { bg: 'var(--q-surface-bg)', border: 'var(--q-border-primary)', text: 'var(--q-text-muted)', activeBg: 'var(--q-surface-bg)' }
+              ? { bg: 'var(--q-surface-bg)', border: 'var(--q-border-primary)', text: 'var(--q-text-muted)', activeBg: 'var(--q-surface-bg)', highlight: 'var(--q-surface-bg)', hoverHighlight: 'var(--q-surface-bg)', activeHighlight: 'var(--q-surface-bg)' }
               : getDimensionColors(displayScore!)
             return (
               <div
@@ -1102,10 +1220,10 @@ function FeedbackState() {
                 ref={el => { cardRefs.current[d.key] = el }}
                 onClick={() => !versionPending && toggleDimension(d.key)}
                 className={['rounded-[var(--q-radius-xl)] border-2 bg-[var(--q-surface-base)] overflow-hidden flex-shrink-0 transition-all', versionPending ? '' : 'cursor-pointer'].join(' ')}
-                style={{ borderColor: colors.border, outline: isActive && !versionPending ? `3px solid ${colors.bg}` : undefined }}
+                style={{ borderColor: isActive && !versionPending ? 'transparent' : (colors.highlight ?? colors.border), boxShadow: isActive && !versionPending ? `inset 0 0 0 3px ${colors.activeHighlight}` : undefined }}
               >
                 <div className="px-[var(--q-space-16)] py-[var(--q-space-16)] flex items-center justify-between gap-[var(--q-space-8)]">
-                  <span className="q-h5 min-w-0" style={{ color: colors.text }}>
+                  <span className="q-sh3 min-w-0" style={{ color: colors.text }}>
                     {versionPending ? d.name : `${d.name} ${displayScore}/20`}
                   </span>
                   {!versionPending && (
@@ -1120,9 +1238,13 @@ function FeedbackState() {
                   {isOpen && (
                     <motion.div key={`${d.key}-body`} initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2, ease: [0.30, 0.00, 0.44, 1.00] }} className="overflow-hidden">
                       <div className="px-[var(--q-space-16)] pb-[var(--q-space-16)] space-y-[var(--q-space-8)]">
+                        <p className="q-sh5 text-[var(--q-twilight-700)]">Score explained</p>
                         <p className="q-b4 text-[var(--q-text-primary)] leading-relaxed">{displayedFeedback.dimensions[d.key].diagnosis}</p>
-                        <div className="rounded-[var(--q-radius-md)] p-[var(--q-space-10)] space-y-[var(--q-space-4)]" style={{ backgroundColor: colors.bg }}>
-                          <p className="q-sh5 uppercase tracking-wider" style={{ color: colors.text }}>Next time</p>
+                        <div className="rounded-[var(--q-radius-xl)] p-[var(--q-space-16)] flex flex-col gap-[var(--q-space-8)] bg-[var(--q-twilight-100)]">
+                          <div className="flex items-center gap-[var(--q-space-6)]">
+                            <span className="material-symbols-rounded text-[var(--q-twilight-400)]" style={{ fontSize: 16 }}>trending_up</span>
+                            <p className="q-sh5 text-[var(--q-twilight-700)]">To improve score</p>
+                          </div>
                           <p className="q-b4 text-[var(--q-text-primary)] leading-relaxed">{displayedFeedback.dimensions[d.key].suggestion}</p>
                         </div>
                       </div>

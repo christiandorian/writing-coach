@@ -365,6 +365,14 @@ html, body {
   animation: pulse-danger 1s var(--q-ease-fade) infinite;
 }
 
+.scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
 mark.cursor-pointer:hover {
   background-color: var(--mark-hover-bg) !important;
 }

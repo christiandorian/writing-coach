@@ -23,6 +23,13 @@ export default function WorkspacePage() {
   const startX = useRef(0)
   const startWidth = useRef(DEFAULT_WIDTH)
 
+  // Show persisted sources immediately on client mount (no loading flash for returning users)
+  useEffect(() => {
+    if (useWorkspaceStore.getState().sources.length > 0) {
+      setSourcesLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     const load = async () => {
       // Load past sessions

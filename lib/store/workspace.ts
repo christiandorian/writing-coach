@@ -51,6 +51,7 @@ interface WorkspaceState {
   toggleSource: (id: string) => void
   removeSource: (id: string) => void
   setSourceTags: (id: string, tags: string[]) => void
+  updateSourceContent: (id: string, content: string) => void
   startActivity: (prompt: string, category: PromptCategory, timeLimitMinutes: TimeLimitOption) => void
   lockPosition: (position: string) => void
   setResponse: (text: string) => void
@@ -130,6 +131,11 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   setSourceTags: (id, tags) =>
     set((s) => ({
       sources: s.sources.map((src) => src.id === id ? { ...src, tags } : src),
+    })),
+
+  updateSourceContent: (id, content) =>
+    set((s) => ({
+      sources: s.sources.map((src) => src.id === id ? { ...src, content } : src),
     })),
 
   startActivity: (prompt, category, timeLimitMinutes) =>

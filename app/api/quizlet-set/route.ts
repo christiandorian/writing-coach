@@ -8,7 +8,8 @@ export interface FlashcardTerm {
 
 export async function GET(req: NextRequest) {
   const title = req.nextUrl.searchParams.get('title') ?? ''
-  const count = Math.min(parseInt(req.nextUrl.searchParams.get('count') ?? '12'), 20)
+  const count = Math.min(parseInt(req.nextUrl.searchParams.get('count') ?? '12'), 40)
+  const offset = parseInt(req.nextUrl.searchParams.get('offset') ?? '0')
 
   try {
     const completion = await openai.chat.completions.create({
@@ -16,11 +17,11 @@ export async function GET(req: NextRequest) {
       response_format: { type: 'json_object' },
       messages: [{
         role: 'user',
-        content: `Generate ${count} realistic flashcard terms and definitions for a Quizlet set titled: "${title}". Make the terms and definitions academically accurate and appropriate for the subject. Keep definitions concise (1-2 sentences).
+        content: `Generate ${count} realistic flashcard terms and definitions for a Quizlet set titled: "${title}".${offset > 0 ? ` These must be DIFFERENT from the first ${offset} terms — cover other concepts from this subject.` : ''} Be academically accurate. Keep each definition to ONE sentence maximum.
 
 Return JSON: { "terms": [{ "term": string, "definition": string }] }`,
       }],
-      temperature: 0.7,
+      temperature: 0.6,
     })
 
     const raw = completion.choices[0].message.content

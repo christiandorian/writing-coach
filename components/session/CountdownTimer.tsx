@@ -37,8 +37,8 @@ export default function CountdownTimer({ totalSeconds, onExpire, onTick, hideIco
     return () => clearInterval(interval)
   }, [remaining])
 
-  const isWarning = remaining <= 5 * 60 && remaining > 2 * 60
-  const isDanger = remaining <= 2 * 60
+  const isWarning = remaining <= 3 * 60 && remaining > 60
+  const isDanger = remaining <= 60
 
   return (
     <div className={[

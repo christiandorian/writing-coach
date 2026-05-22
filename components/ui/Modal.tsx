@@ -11,9 +11,10 @@ interface ModalProps {
   title?: string
   subtitle?: string
   maxWidth?: number
+  titleClass?: string
 }
 
-export default function Modal({ open, onClose, children, title, subtitle, maxWidth = 480 }: ModalProps) {
+export default function Modal({ open, onClose, children, title, subtitle, maxWidth = 480, titleClass }: ModalProps) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
@@ -52,7 +53,7 @@ export default function Modal({ open, onClose, children, title, subtitle, maxWid
 
             {(title || subtitle) && (
               <div className="mb-[var(--q-space-20)] pr-[var(--q-space-48)] space-y-[var(--q-space-4)]">
-                {title && <h2 className="q-h3 text-[var(--q-text-primary)]">{title}</h2>}
+                {title && <h2 className={`${titleClass ?? 'q-h3'} text-[var(--q-text-primary)]`}>{title}</h2>}
                 {subtitle && <p className="q-sh4 text-[var(--q-text-secondary)]">{subtitle}</p>}
               </div>
             )}

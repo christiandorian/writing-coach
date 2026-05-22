@@ -312,7 +312,7 @@ function IdleState() {
                         rows={4}
                         className={[
                           'w-full bg-[var(--q-surface-bg)] rounded-[var(--q-radius-md)]',
-                          'p-[var(--q-space-16)] min-h-[96px] resize-none q-sh3',
+                          'p-[var(--q-space-16)] min-h-[128px] resize-none q-sh3',
                           'text-[var(--q-text-primary)] placeholder-[var(--q-text-muted)]',
                           'border-2 transition-all focus:outline-none',
                           customError
@@ -329,7 +329,7 @@ function IdleState() {
                     </div>
                   ) : (
                     <div
-                      className="bg-[var(--q-surface-bg)] rounded-[var(--q-radius-md)] p-[var(--q-space-16)] min-h-[96px] cursor-text border-2 border-transparent"
+                      className="bg-[var(--q-surface-bg)] rounded-[var(--q-radius-md)] p-[var(--q-space-16)] min-h-[128px] cursor-text border-2 border-transparent"
                       onClick={() => {
                         const desc = CATEGORIES.find((c) => c.value === category)?.desc ?? ''
                         setCustomContext(desc)
@@ -390,6 +390,7 @@ function PromptWritingState() {
   } = useWorkspaceStore()
   const supabase = createClient()
   const [showConfirm, setShowConfirm] = useState(false)
+  const [showChangePromptConfirm, setShowChangePromptConfirm] = useState(false)
   const [autoSubmitted, setAutoSubmitted] = useState(false)
   const [regenerating, setRegenerating] = useState(false)
   const [promptOpen, setPromptOpen] = useState(true)
@@ -476,7 +477,7 @@ function PromptWritingState() {
             {/* Header — always at the same position, never moves */}
             <div className="flex items-center gap-[var(--q-space-8)] px-[var(--q-space-24)] py-[var(--q-space-16)] justify-between">
               <div className="flex items-center gap-[var(--q-space-8)] min-w-0 flex-1">
-                <span className="inline-flex items-center flex-shrink-0 q-sh5 text-[var(--q-surface-base)] bg-[var(--q-gray-600)] px-[var(--q-space-12)] py-[var(--q-space-4)] rounded-[var(--q-radius-full)]">
+                <span className="inline-flex items-center flex-shrink-0 q-sh5 text-[var(--q-surface-base)] bg-[var(--q-text-primary)] px-[var(--q-space-12)] py-[var(--q-space-4)] rounded-[var(--q-radius-full)]">
                   Prompt
                 </span>
                 <AnimatePresence mode="popLayout">
@@ -520,10 +521,13 @@ function PromptWritingState() {
         )}
 
         {/* Textarea with absolute controls, scratch pad toggle, expand toggle */}
-        <div className={[
-          'bg-[var(--q-surface-base)] border-2 border-[var(--q-twilight-300)] rounded-[var(--q-radius-xl)] overflow-hidden flex flex-col relative',
-          isExpanded ? 'flex-1 my-[var(--q-space-16)]' : 'flex-shrink-0',
-        ].join(' ')}>
+        <motion.div
+          layout
+          transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+          className={[
+            'bg-[var(--q-surface-base)] border-2 border-[var(--q-twilight-300)] rounded-[var(--q-radius-xl)] overflow-hidden flex flex-col relative',
+            isExpanded ? 'flex-1 my-[var(--q-space-16)]' : 'flex-shrink-0',
+          ].join(' ')}>
 
           {/* Buttons — absolutely overlaid top-right so textarea starts from the top */}
           <div className="absolute top-[var(--q-space-8)] right-[var(--q-space-12)] flex items-center gap-[var(--q-space-8)] z-10">
@@ -558,7 +562,7 @@ function PromptWritingState() {
               <WritingArea
                 value={scratchPadText}
                 onChange={setScratchPadText}
-                className="border-0 focus:ring-0 rounded-none pr-[104px]"
+                className="border-0 focus:ring-0 rounded-none pr-[104px] placeholder:text-sm placeholder:font-semibold placeholder:text-[var(--q-text-secondary)]"
                 fill={isExpanded}
                 placeholder="Your position, why, supporting examples, etc."
               />
@@ -650,7 +654,7 @@ function PromptWritingState() {
             )}
             <CountdownTimer totalSeconds={timeLimitSeconds} onExpire={handleExpire} />
           </div>
-        </div>
+        </motion.div>
 
       </div>
 
@@ -661,21 +665,40 @@ function PromptWritingState() {
           style={{ background: 'linear-gradient(to bottom, transparent, var(--q-surface-base))' }}
         />
         <div className="bg-[var(--q-surface-base)] px-[var(--q-space-24)] py-[var(--q-space-16)] flex items-center justify-center gap-[var(--q-space-12)]">
-          <Button variant="tertiary" size="xlarge" onClick={resetSession}>
+          <Button variant="tertiary" size="xlarge" onClick={() => setShowChangePromptConfirm(true)}>
             Change prompt
           </Button>
-          <Button size="xlarge" onClick={() => setShowConfirm(true)} disabled={wordCount < 100}>
+          <Button size="xlarge" onClick={() => setShowConfirm(true)} disabled={wordCount < 50}>
             Submit your response
           </Button>
         </div>
       </div>
 
-      <Modal open={showConfirm} onClose={() => setShowConfirm(false)} title="Ready to submit?">
-        <div className="space-y-[var(--q-space-20)]">
-          <p className="q-b4 text-[var(--q-text-secondary)]">You won't be able to edit after submitting.</p>
-          <div className="flex flex-col gap-[var(--q-space-8)]">
-            <Button size="md" className="w-full" onClick={() => { setShowConfirm(false); handleSubmit() }}>Submit</Button>
-            <Button variant="secondary" size="md" className="w-full" onClick={() => setShowConfirm(false)}>Keep writing</Button>
+      <Modal open={showConfirm} onClose={() => setShowConfirm(false)} maxWidth={560}>
+        {/* Custom confirm modal matching Figma */}
+        <div className="flex flex-col -mx-[var(--q-space-24)] -mb-[var(--q-space-24)]">
+          <div className="flex flex-col gap-[var(--q-space-16)] px-[var(--q-space-32)] pb-[var(--q-space-32)] pt-[var(--q-space-4)]">
+            <p className="q-h2 text-[var(--q-text-primary)]">Ready to submit?</p>
+            <p className="q-b2 text-[var(--q-text-primary)]">You won't be able to edit your response after it is submitted</p>
+          </div>
+          <div className="h-px bg-[var(--q-border-primary)] w-full mb-[var(--q-space-16)]" />
+          <div className="flex items-center justify-end gap-[var(--q-space-16)] px-[var(--q-space-16)] pb-[var(--q-space-16)]">
+            <Button variant="tertiary" size="large" onClick={() => setShowConfirm(false)}>Keep writing</Button>
+            <Button size="large" onClick={() => { setShowConfirm(false); handleSubmit() }}>Submit</Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={showChangePromptConfirm} onClose={() => setShowChangePromptConfirm(false)} maxWidth={560}>
+        <div className="flex flex-col -mx-[var(--q-space-24)] -mb-[var(--q-space-24)]">
+          <div className="flex flex-col gap-[var(--q-space-16)] px-[var(--q-space-32)] pb-[var(--q-space-32)] pt-[var(--q-space-4)]">
+            <p className="q-h2 text-[var(--q-text-primary)]">Change prompt?</p>
+            <p className="q-b2 text-[var(--q-text-primary)]">Changing the prompt during an activity will restart the activity and you will lose your current progress. Would you like to proceed?</p>
+          </div>
+          <div className="h-px bg-[var(--q-border-primary)] w-full mb-[var(--q-space-16)]" />
+          <div className="flex items-center justify-end gap-[var(--q-space-16)] px-[var(--q-space-16)] pb-[var(--q-space-16)]">
+            <Button variant="tertiary" size="large" onClick={() => setShowChangePromptConfirm(false)}>Cancel</Button>
+            <Button variant="danger" size="large" onClick={() => { setShowChangePromptConfirm(false); resetSession() }}>Change prompt</Button>
           </div>
         </div>
       </Modal>
@@ -941,7 +964,7 @@ function FeedbackState() {
     <div className="rounded-[var(--q-radius-xl)] bg-[var(--q-surface-bg)] overflow-hidden flex-shrink-0">
       <div className="flex items-center gap-[var(--q-space-8)] px-[var(--q-space-24)] py-[var(--q-space-16)] justify-between cursor-pointer" onClick={() => setPromptOpen(o => !o)}>
         <div className="flex items-center gap-[var(--q-space-8)] min-w-0 flex-1">
-          <span className="inline-flex items-center flex-shrink-0 q-sh5 text-[var(--q-surface-base)] bg-[var(--q-gray-600)] px-[var(--q-space-12)] py-[var(--q-space-4)] rounded-[var(--q-radius-full)]">Prompt</span>
+          <span className="inline-flex items-center flex-shrink-0 q-sh5 text-[var(--q-surface-base)] bg-[var(--q-text-primary)] px-[var(--q-space-12)] py-[var(--q-space-4)] rounded-[var(--q-radius-full)]">Prompt</span>
           <AnimatePresence mode="popLayout">
             {!promptOpen && (
               <motion.p key="preview" initial={{ opacity: 0 }} animate={{ opacity: 1, transition: { duration: 0.2, delay: 0.15 } }} exit={{ opacity: 0, transition: { duration: 0.1 } }} className="q-sh4 text-[var(--q-text-secondary)] truncate min-w-0 flex-1">{prompt}</motion.p>
@@ -1087,7 +1110,7 @@ function FeedbackState() {
               </div>
               {isPendingScratchPad ? (
                 pendingScratchPadTemplate === 'custom' ? (
-                  <WritingArea value={pendingScratchPadText} onChange={setPendingScratchPadText} className={isPendingExpanded ? 'border-0 focus:ring-0 rounded-none pr-[104px]' : 'border-0 focus:ring-0 rounded-none pr-[104px] h-[38vh] min-h-[200px]'} fill={isPendingExpanded} placeholder="Your position, why, supporting examples, etc." />
+                  <WritingArea value={pendingScratchPadText} onChange={setPendingScratchPadText} className={isPendingExpanded ? 'border-0 focus:ring-0 rounded-none pr-[104px] placeholder:text-sm placeholder:font-semibold placeholder:text-[var(--q-text-secondary)]' : 'border-0 focus:ring-0 rounded-none pr-[104px] h-[38vh] min-h-[200px] placeholder:text-sm placeholder:font-semibold placeholder:text-[var(--q-text-secondary)]'} fill={isPendingExpanded} placeholder="Your position, why, supporting examples, etc." />
                 ) : (
                   <div className={['overflow-y-auto px-[var(--q-space-16)] pt-[var(--q-space-16)] pb-[var(--q-space-4)] flex flex-col gap-[var(--q-space-16)]', isPendingExpanded ? 'flex-1 min-h-0' : 'h-[38vh] min-h-[200px]'].join(' ')} style={{ maskImage: 'linear-gradient(to bottom, transparent 0, black 20px, black calc(100% - 20px), transparent 100%)', WebkitMaskImage: 'linear-gradient(to bottom, transparent 0, black 20px, black calc(100% - 20px), transparent 100%)' }}>
                     {pendingScratchPadTemplate === 'outline' ? (
@@ -1240,7 +1263,7 @@ function FeedbackState() {
                 ref={el => { cardRefs.current[d.key] = el }}
                 onClick={() => !versionPending && toggleDimension(d.key)}
                 className={['rounded-[var(--q-radius-xl)] border-2 bg-[var(--q-surface-base)] overflow-hidden flex-shrink-0 transition-all', versionPending ? '' : 'cursor-pointer'].join(' ')}
-                style={{ borderColor: isActive && !versionPending ? 'transparent' : (colors.highlight ?? colors.border), boxShadow: isActive && !versionPending ? `inset 0 0 0 3px ${colors.activeHighlight}` : undefined }}
+                style={{ borderColor: isActive && !versionPending ? colors.activeHighlight : (colors.highlight ?? colors.border) }}
               >
                 <div className="px-[var(--q-space-16)] py-[var(--q-space-16)] flex items-center justify-between gap-[var(--q-space-8)]">
                   <span className="q-sh3 min-w-0" style={{ color: colors.text }}>
@@ -1257,15 +1280,14 @@ function FeedbackState() {
                 <AnimatePresence initial={false}>
                   {isOpen && (
                     <motion.div key={`${d.key}-body`} initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2, ease: [0.30, 0.00, 0.44, 1.00] }} className="overflow-hidden">
-                      <div className="px-[var(--q-space-16)] pb-[var(--q-space-16)] space-y-[var(--q-space-8)]">
-                        <p className="q-sh5 text-[var(--q-twilight-700)]">Score explained</p>
+                      <div className="px-[var(--q-space-16)] py-[var(--q-space-16)] space-y-[var(--q-space-16)]">
                         <p className="q-b4 text-[var(--q-text-primary)] leading-relaxed">{displayedFeedback.dimensions[d.key].diagnosis}</p>
-                        <div className="rounded-[var(--q-radius-xl)] p-[var(--q-space-16)] flex flex-col gap-[var(--q-space-8)] bg-[var(--q-twilight-100)]">
+                        <div className="rounded-[var(--q-radius-xl)] p-[var(--q-space-16)] flex flex-col gap-[var(--q-space-8)] bg-[var(--q-mint-100)]">
                           <div className="flex items-center gap-[var(--q-space-6)]">
-                            <span className="material-symbols-rounded text-[var(--q-twilight-400)]" style={{ fontSize: 16 }}>trending_up</span>
-                            <p className="q-sh5 text-[var(--q-twilight-700)]">To improve score</p>
+                            <span className="material-symbols-rounded" style={{ fontSize: 16, color: 'var(--q-text-success)' }}>trending_up</span>
+                            <p className="q-sh4" style={{ color: 'var(--q-text-success)' }}>Next time</p>
                           </div>
-                          <p className="q-b4 text-[var(--q-text-primary)] leading-relaxed">{displayedFeedback.dimensions[d.key].suggestion}</p>
+                          <p className="q-sh4 text-[var(--q-text-primary)] leading-relaxed">{displayedFeedback.dimensions[d.key].suggestion}</p>
                         </div>
                       </div>
                     </motion.div>
@@ -1318,7 +1340,7 @@ function FeedbackState() {
         <div className="absolute -top-10 left-0 right-0 h-10 pointer-events-none" style={{ background: 'linear-gradient(to bottom, transparent, var(--q-surface-base))' }} />
         <div className="bg-[var(--q-surface-base)] px-[var(--q-space-24)] py-[var(--q-space-16)] flex items-center justify-center gap-[var(--q-space-16)]">
           {activeTab === 'writing' ? (
-            <Button size="xlarge" onClick={() => setShowRewriteConfirm(true)} disabled={countWords(pendingText) < 100 || isSubmittingRewrite}>
+            <Button size="xlarge" onClick={() => setShowRewriteConfirm(true)} disabled={countWords(pendingText) < 50 || isSubmittingRewrite}>
               {isSubmittingRewrite ? (
                 <span className="flex items-center gap-[var(--q-space-8)]">
                   <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />

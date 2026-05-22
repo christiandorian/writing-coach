@@ -6,11 +6,11 @@ import type { Source } from '@/lib/store/workspace'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import { createClient } from '@/lib/supabase/client'
-import SourceSearchModal from '@/components/workspace/SourceSearchModal'
+import SourceSearchModal, { prefetchPopularSets } from '@/components/workspace/SourceSearchModal'
 import type { QuizletSet } from '@/app/api/quizlet-search/route'
 
 export default function LeftRail({ sourcesLoading = false }: { sourcesLoading?: boolean }) {
-  const { sources, addSource, toggleSource, removeSource, setSourceTags } = useWorkspaceStore()
+  const { sources, addSource, toggleSource, removeSource, setSourceTags, updateSourceContent, step, resetSession } = useWorkspaceStore()
   const supabase = createClient()
   const fileRef = useRef<HTMLInputElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -18,11 +18,16 @@ export default function LeftRail({ sourcesLoading = false }: { sourcesLoading?: 
   const [addMenuOpen, setAddMenuOpen] = useState(false)
   const [pasteModalOpen, setPasteModalOpen] = useState(false)
   const [searchModalOpen, setSearchModalOpen] = useState(false)
+  const [restartWarningOpen, setRestartWarningOpen] = useState(false)
+  const pendingToggleRef = useRef<(() => void) | null>(null)
   const [textName, setTextName] = useState('')
   const [textContent, setTextContent] = useState('')
   const [loadingFile, setLoadingFile] = useState(false)
   const [loadingSourceId, setLoadingSourceId] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Prefetch popular Quizlet sets in background on mount
+  useEffect(() => { prefetchPopularSets() }, [])
 
   const getUserId = async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -66,11 +71,14 @@ export default function LeftRail({ sourcesLoading = false }: { sourcesLoading?: 
     } catch {}
   }
 
-  const handleAddQuizletSet = (set: QuizletSet, terms: import('@/app/api/quizlet-set/route').FlashcardTerm[]) => {
+  const handleAddQuizletSet = (set: QuizletSet, terms: import('@/app/api/quizlet-set/route').FlashcardTerm[]): string => {
     const termLines = terms.length > 0
       ? terms.map(t => `${t.term}: ${t.definition}`).join('\n')
       : `${set.title} — ${set.termCount} terms by ${set.author}`
-    addSource({ name: set.title, content: termLines, type: 'quizlet' })
+    const id = addSource({ name: set.title, content: termLines, type: 'quizlet', fileData: set.author })
+    // Preload tags in background so they're ready when the user opens the source
+    generateTags(id, termLines, set.title)
+    return id
   }
 
   const handleFile = async (file: File) => {
@@ -309,6 +317,14 @@ export default function LeftRail({ sourcesLoading = false }: { sourcesLoading?: 
                 source={src}
                 loading={loadingSourceId === src.id}
                 onToggle={() => {
+                  if (step === 'writing') {
+                    pendingToggleRef.current = () => {
+                      toggleSource(src.id)
+                      updateSelectedInDB(src.id, !src.selected)
+                    }
+                    setRestartWarningOpen(true)
+                    return
+                  }
                   toggleSource(src.id)
                   updateSelectedInDB(src.id, !src.selected)
                 }}
@@ -323,11 +339,32 @@ export default function LeftRail({ sourcesLoading = false }: { sourcesLoading?: 
       </div>
 
 
+      {/* Restart activity warning modal */}
+      <Modal open={restartWarningOpen} onClose={() => setRestartWarningOpen(false)} maxWidth={560}>
+        <div className="flex flex-col -mx-[var(--q-space-24)] -mb-[var(--q-space-24)]">
+          <div className="flex flex-col gap-[var(--q-space-16)] px-[var(--q-space-32)] pb-[var(--q-space-32)] pt-[var(--q-space-4)]">
+            <p className="q-h2 text-[var(--q-text-primary)]">Restart activity?</p>
+            <p className="q-b2 text-[var(--q-text-primary)]">Changing sources during an activity will restart the activity and you will lose your current progress. Would you like to proceed?</p>
+          </div>
+          <div className="h-px bg-[var(--q-border-primary)] w-full mb-[var(--q-space-16)]" />
+          <div className="flex items-center justify-end gap-[var(--q-space-16)] px-[var(--q-space-16)] pb-[var(--q-space-16)]">
+            <Button variant="tertiary" size="large" onClick={() => setRestartWarningOpen(false)}>Cancel</Button>
+            <Button variant="danger" size="large" onClick={() => {
+              setRestartWarningOpen(false)
+              resetSession()
+              pendingToggleRef.current?.()
+              pendingToggleRef.current = null
+            }}>Restart activity</Button>
+          </div>
+        </div>
+      </Modal>
+
       {/* Quizlet search modal */}
       <SourceSearchModal
         open={searchModalOpen}
         onClose={() => setSearchModalOpen(false)}
         onAdd={handleAddQuizletSet}
+        onUpdateContent={updateSourceContent}
       />
 
       {/* Paste text modal */}
@@ -348,7 +385,7 @@ export default function LeftRail({ sourcesLoading = false }: { sourcesLoading?: 
           />
           <div className="flex justify-end">
             <Button size="large" onClick={handlePasteInsert} disabled={!textContent.trim()}>
-              Insert
+              Add source
             </Button>
           </div>
         </div>
@@ -476,7 +513,7 @@ function SourceItem({ source, loading = false, onToggle, onRemove }: { source: S
           style={{ backgroundColor: source.type === 'quizlet' ? '#eaf9ff' : '#EDEFF4' }}
         >
           {loading ? (
-            <span className="w-5 h-5 border-2 border-[var(--q-gray-400)] border-t-[var(--q-twilight-500)] rounded-full animate-spin" />
+            <span className="material-symbols-rounded text-[var(--q-text-secondary)] animate-spin" style={{ fontSize: 24 }}>progress_activity</span>
           ) : source.type === 'quizlet' ? (
             <img src="/set.png" alt="" className="w-6 h-6 object-contain" />
           ) : (
@@ -559,8 +596,13 @@ function SourceItem({ source, loading = false, onToggle, onRemove }: { source: S
       </div>
 
       {/* View source modal */}
-      <Modal open={viewOpen} onClose={() => setViewOpen(false)} title={source.name || (source.type === 'text' ? 'Pasted text' : source.name)} maxWidth={source.dataUrl ? 620 : 480}>
-        <SourceTagsDisplay tags={source.tags} loading={tagsLoading} />
+      <Modal open={viewOpen} onClose={() => setViewOpen(false)} title={source.name || (source.type === 'text' ? 'Pasted text' : source.name)} titleClass={source.type === 'quizlet' ? 'q-h2' : undefined} maxWidth={620}>
+        {source.type === 'quizlet' && (() => {
+          const termCount = (source.content ?? '').split('\n').filter(l => l.trim()).length
+          const author = source.fileData
+          return <p className="q-sh5 text-[var(--q-text-secondary)] -mt-[var(--q-space-8)] mb-[var(--q-space-16)]">{termCount} terms{author ? ` · by ${author}` : ''}</p>
+        })()}
+        {source.type !== 'quizlet' && <SourceTagsDisplay tags={source.tags} loading={tagsLoading} />}
         {source.dataUrl ? (
           source.name?.match(/\.(png|jpg|jpeg|gif|webp)$/i) ? (
             <div className="rounded-[var(--q-radius-md)] overflow-hidden bg-[var(--q-surface-bg)] flex items-center justify-center" style={{ maxHeight: '65vh' }}>
@@ -571,7 +613,32 @@ function SourceItem({ source, loading = false, onToggle, onRemove }: { source: S
               <iframe src={source.dataUrl} className="w-full h-full border-0" title={source.name} />
             </div>
           )
-        ) : (
+        ) : source.type === 'quizlet' ? (() => {
+            const termLines = (source.content ?? '').split('\n').filter(l => l.trim())
+            const termCount = termLines.length
+            return (
+              <div className="flex flex-col gap-[var(--q-space-12)]">
+                <div className="max-h-[60vh] overflow-y-auto flex flex-col gap-[var(--q-space-8)] pr-1">
+                  {termLines.map((line, i) => {
+                    const colonIdx = line.indexOf(': ')
+                    const term = colonIdx >= 0 ? line.slice(0, colonIdx) : line
+                    const def = colonIdx >= 0 ? line.slice(colonIdx + 2) : ''
+                    return (
+                      <div key={i} className="grid grid-cols-2 gap-[2px]">
+                        <div className="bg-[var(--q-surface-bg)] px-4 py-4 rounded-l-[16px]">
+                          <p className="q-sh3 text-[var(--q-text-primary)]">{term}</p>
+                        </div>
+                        <div className="bg-[var(--q-surface-bg)] px-4 py-4 rounded-r-[16px]">
+                          <p className="q-b4 text-[var(--q-text-secondary)] leading-relaxed">{def}</p>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()
+        : (
           <div className="max-h-[60vh] overflow-y-auto bg-[var(--q-surface-bg)] rounded-[var(--q-radius-md)] p-[var(--q-space-16)]">
             <p className="q-b3 text-[var(--q-text-primary)] whitespace-pre-wrap leading-relaxed break-words">{source.content}</p>
           </div>

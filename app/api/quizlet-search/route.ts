@@ -8,7 +8,7 @@ export interface QuizletSet {
   author: string
 }
 
-const POPULAR_PROMPT = `Generate 8 realistic, diverse Quizlet flashcard sets that would be popular for students studying various academic subjects. Cover a mix of sciences, humanities, history, and languages. Each should feel like a real study set a student would share.
+const POPULAR_PROMPT = `Generate 8 realistic, highly-rated Quizlet flashcard sets that students use to prepare for standardized test writing sections. Cover these five exams proportionally: LSAT (logical reasoning & argumentation), GRE Analytical Writing (analytical reasoning & argument evaluation), IELTS Academic Writing (task 1 & task 2 vocabulary/structures), TOEFL Writing (integrated & independent tasks, academic vocabulary), and ACT Writing (persuasive essay strategies). Include sets for vocabulary, essay templates, argument structures, and scoring rubrics. Term counts should be between 25 and 120. Authors should look like real usernames (e.g., "PrepMaster99", "TestReadyAlex", "LSATpro_2026").
 
 Return JSON:
 { "sets": [{ "id": string, "title": string, "termCount": number, "author": string }] }`

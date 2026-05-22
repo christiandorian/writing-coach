@@ -1284,7 +1284,7 @@ function FeedbackState() {
                         <p className="q-b4 text-[var(--q-text-primary)] leading-relaxed">{displayedFeedback.dimensions[d.key].diagnosis}</p>
                         <div className="rounded-[var(--q-radius-xl)] p-[var(--q-space-16)] flex flex-col gap-[var(--q-space-8)] bg-[var(--q-mint-100)]">
                           <div className="flex items-center gap-[var(--q-space-6)]">
-                            <span className="material-symbols-rounded" style={{ fontSize: 16, color: 'var(--q-text-success)' }}>trending_up</span>
+                            <span className="material-symbols-rounded" style={{ fontSize: 16, color: 'var(--q-text-success)' }}>wb_incandescent</span>
                             <p className="q-sh4" style={{ color: 'var(--q-text-success)' }}>Next time</p>
                           </div>
                           <p className="q-sh4 text-[var(--q-text-primary)] leading-relaxed">{displayedFeedback.dimensions[d.key].suggestion}</p>
@@ -1340,14 +1340,17 @@ function FeedbackState() {
         <div className="absolute -top-10 left-0 right-0 h-10 pointer-events-none" style={{ background: 'linear-gradient(to bottom, transparent, var(--q-surface-base))' }} />
         <div className="bg-[var(--q-surface-base)] px-[var(--q-space-24)] py-[var(--q-space-16)] flex items-center justify-center gap-[var(--q-space-16)]">
           {activeTab === 'writing' ? (
-            <Button size="xlarge" onClick={() => setShowRewriteConfirm(true)} disabled={countWords(pendingText) < 50 || isSubmittingRewrite}>
-              {isSubmittingRewrite ? (
-                <span className="flex items-center gap-[var(--q-space-8)]">
-                  <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                  Analyzing...
-                </span>
-              ) : 'Submit'}
-            </Button>
+            <>
+              <Button variant="secondary" size="xlarge" onClick={resetSession}>Change prompt</Button>
+              <Button size="xlarge" onClick={() => setShowRewriteConfirm(true)} disabled={countWords(pendingText) < 50 || isSubmittingRewrite}>
+                {isSubmittingRewrite ? (
+                  <span className="flex items-center gap-[var(--q-space-8)]">
+                    <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                    Analyzing...
+                  </span>
+                ) : 'Submit'}
+              </Button>
+            </>
           ) : (
             <>
               <Button variant="secondary" size="xlarge" onClick={resetSession}>Change prompt</Button>

@@ -460,6 +460,36 @@ function SourceItem({ source, loading = false, onToggle, onRemove }: { source: S
   const [viewOpen, setViewOpen] = useState(false)
   const [tagsLoading, setTagsLoading] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+  // Rebuilt blob URL (used when source.dataUrl was stripped on page reload)
+  const [localDataUrl, setLocalDataUrl] = useState<string | null>(null)
+
+  // When the view modal opens, ensure we have a renderable URL for binary sources.
+  // source.dataUrl is valid when freshly uploaded in this session; after a page reload
+  // it's stripped (blob URLs die), so we rebuild it from the persisted base64 fileData.
+  useEffect(() => {
+    if (!viewOpen) {
+      return
+    }
+    if (source.dataUrl) {
+      setLocalDataUrl(source.dataUrl)
+      return
+    }
+    if (source.fileData && source.type === 'pdf') {
+      try {
+        const binary = atob(source.fileData)
+        const bytes = new Uint8Array(binary.length)
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+        const isImage = source.name?.match(/\.(png|jpg|jpeg|gif|webp)$/i)
+        const mimeType = isImage
+          ? `image/${source.name.split('.').pop()?.toLowerCase()}`
+          : 'application/pdf'
+        const blob = new Blob([bytes], { type: mimeType })
+        setLocalDataUrl(URL.createObjectURL(blob))
+      } catch {
+        setLocalDataUrl(null)
+      }
+    }
+  }, [viewOpen, source.dataUrl, source.fileData, source.type, source.name])
 
   // Generate tags lazily when the view modal opens for the first time
   useEffect(() => {
@@ -603,14 +633,14 @@ function SourceItem({ source, loading = false, onToggle, onRemove }: { source: S
           return <p className="q-sh5 text-[var(--q-text-secondary)] -mt-[var(--q-space-8)] mb-[var(--q-space-16)]">{termCount} terms{author ? ` · by ${author}` : ''}</p>
         })()}
         {source.type !== 'quizlet' && <SourceTagsDisplay tags={source.tags} loading={tagsLoading} />}
-        {source.dataUrl ? (
+        {localDataUrl ? (
           source.name?.match(/\.(png|jpg|jpeg|gif|webp)$/i) ? (
             <div className="rounded-[var(--q-radius-md)] overflow-hidden bg-[var(--q-surface-bg)] flex items-center justify-center" style={{ maxHeight: '65vh' }}>
-              <img src={source.dataUrl} alt={source.name} className="max-w-full max-h-full object-contain" />
+              <img src={localDataUrl} alt={source.name} className="max-w-full max-h-full object-contain" />
             </div>
           ) : (
             <div className="rounded-[var(--q-radius-md)] overflow-hidden bg-[var(--q-surface-bg)]" style={{ height: '65vh' }}>
-              <iframe src={source.dataUrl} className="w-full h-full border-0" title={source.name} />
+              <iframe src={localDataUrl} className="w-full h-full border-0" title={source.name} />
             </div>
           )
         ) : source.type === 'quizlet' ? (() => {

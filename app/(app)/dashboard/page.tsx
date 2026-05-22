@@ -62,25 +62,24 @@ export default function WorkspacePage() {
       setSourcesLoading(false)
 
       if (sourceData && sourceData.length > 0) {
-        const { sources: currentSources, addSource } = useWorkspaceStore.getState()
-        // Only load if store is empty (avoid duplicating on hot reload)
+        const { sources: currentSources } = useWorkspaceStore.getState()
+
+        const buildDataUrl = (fileData: string, name: string): string | undefined => {
+          try {
+            const binary = atob(fileData)
+            const bytes = new Uint8Array(binary.length)
+            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+            const mimeType = name?.match(/\.(png|jpg|jpeg|gif|webp)$/i)
+              ? `image/${name.split('.').pop()?.toLowerCase()}`
+              : 'application/pdf'
+            return URL.createObjectURL(new Blob([bytes], { type: mimeType }))
+          } catch { return undefined }
+        }
+
         if (currentSources.length === 0) {
+          // Fresh load — add all sources from DB
           sourceData.forEach((row: any) => {
-            let dataUrl: string | undefined
-            // Rebuild object URL from base64 for binary files
-            if (row.file_data) {
-              try {
-                const binary = atob(row.file_data)
-                const bytes = new Uint8Array(binary.length)
-                for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
-                const mimeType = row.name?.match(/\.(png|jpg|jpeg|gif|webp)$/i)
-                  ? `image/${row.name.split('.').pop()?.toLowerCase()}`
-                  : 'application/pdf'
-                const blob = new Blob([bytes], { type: mimeType })
-                dataUrl = URL.createObjectURL(blob)
-              } catch {}
-            }
-            // Inject with known id so we don't duplicate on re-load
+            const dataUrl = row.file_data ? buildDataUrl(row.file_data, row.name) : undefined
             useWorkspaceStore.setState(state => ({
               sources: [
                 ...state.sources,
@@ -96,6 +95,14 @@ export default function WorkspacePage() {
               ]
             }))
           })
+        } else {
+          // Store already has sources from localStorage — back-fill missing dataUrls
+          useWorkspaceStore.setState(state => ({
+            sources: state.sources.map(src => {
+              if (src.dataUrl || !src.fileData) return src
+              return { ...src, dataUrl: buildDataUrl(src.fileData, src.name) }
+            })
+          }))
         }
       }
     }

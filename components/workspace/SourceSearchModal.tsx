@@ -4,19 +4,20 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { QuizletSet } from '@/app/api/quizlet-search/route'
 import type { FlashcardTerm } from '@/app/api/quizlet-set/route'
+import { POPULAR_SETS } from '@/lib/popular-sets'
 
-// Module-level cache so popular sets are shared across renders
-let popularSetsCache: QuizletSet[] | null = null
-let prefetchPromise: Promise<void> | null = null
+// Seed caches synchronously from static data — available before any render
+const popularTermsCache = new Map<string, FlashcardTerm[]>()
+POPULAR_SETS.forEach(s => popularTermsCache.set(s.title, s.terms))
 
-export function prefetchPopularSets() {
-  if (popularSetsCache || prefetchPromise) return
-  prefetchPromise = fetch('/api/quizlet-search?q=')
-    .then(r => r.json())
-    .then((data: QuizletSet[]) => { popularSetsCache = data })
-    .catch(() => {})
-    .finally(() => { prefetchPromise = null })
-}
+// Sets cache starts pre-populated so the modal list renders instantly
+let popularSetsCache: QuizletSet[] | null = POPULAR_SETS.map(
+  ({ terms: _terms, ...set }) => set
+)
+
+// No async prefetch needed for sets (static). Kept as a no-op so LeftRail
+// call sites don't need to change; could be used later to refresh in background.
+export function prefetchPopularSets() {}
 
 interface Props {
   open: boolean
@@ -28,7 +29,8 @@ interface Props {
 export default function SourceSearchModal({ open, onClose, onAdd, onUpdateContent }: Props) {
   const pendingUpdateRef = useRef<{ sourceId: string } | null>(null)
   const [query, setQuery] = useState('')
-  const [results, setResults] = useState<QuizletSet[]>([])
+  // Static popular sets are always pre-populated — never a loading state on open
+  const [results, setResults] = useState<QuizletSet[]>(() => popularSetsCache!)
   const [loading, setLoading] = useState(false)
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set())
   const [selectedSet, setSelectedSet] = useState<QuizletSet | null>(null)
@@ -44,17 +46,17 @@ export default function SourceSearchModal({ open, onClose, onAdd, onUpdateConten
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const fetchResults = useCallback(async (q: string) => {
-    // Use cache for empty query (popular sets)
-    if (!q.trim() && popularSetsCache) {
-      setResults(popularSetsCache)
+    // Empty query → always use the static popular sets (instant, no API call)
+    if (!q.trim()) {
+      setResults(popularSetsCache!)
       setLoading(false)
       return
     }
+    // Search query → hit the API
     setLoading(true)
     try {
       const res = await fetch(`/api/quizlet-search?q=${encodeURIComponent(q)}`)
       const data = await res.json() as QuizletSet[]
-      if (!q.trim()) popularSetsCache = data  // cache popular results
       setResults(data)
     } catch {
       setResults([])
@@ -81,18 +83,51 @@ export default function SourceSearchModal({ open, onClose, onAdd, onUpdateConten
     setTermSearchOpen(false)
     setTermSort('original')
     setSortMenuOpen(false)
-    setTerms([])
-    setTermsLoading(true)
     setLoadingMoreTerms(false)
 
-    const totalCount = Math.min(set.termCount, 40)
+    const totalCount = Math.min(set.termCount, 24)
+    const titleParam = encodeURIComponent(set.title)
+
+    // Use cached first-batch terms if the background prefetch already ran
+    const cached = popularTermsCache.get(set.title)
+    if (cached) {
+      setTerms(cached)
+      setTermsLoading(false)
+
+      // Silently fetch remaining terms in background
+      const remaining = Math.min(totalCount - cached.length, 24 - cached.length)
+      if (remaining > 0) {
+        setLoadingMoreTerms(true)
+        try {
+          const more = await fetch(
+            `/api/quizlet-set?title=${titleParam}&count=${remaining}&offset=${cached.length}`
+          ).then(r => r.json() as Promise<FlashcardTerm[]>)
+          if (more.length > 0) {
+            const allTerms = [...cached, ...more]
+            popularTermsCache.set(set.title, allTerms)
+            setTerms(allTerms)
+            if (pendingUpdateRef.current && onUpdateContent) {
+              onUpdateContent(
+                pendingUpdateRef.current.sourceId,
+                allTerms.map(t => `${t.term}: ${t.definition}`).join('\n')
+              )
+              pendingUpdateRef.current = null
+            }
+          }
+        } catch { /* ignore */ }
+        finally { setLoadingMoreTerms(false) }
+      }
+      return
+    }
+
+    // No cache — fall back to normal two-batch fetch
+    setTerms([])
+    setTermsLoading(true)
+
     const firstBatch = Math.min(8, totalCount)
-    const remaining = totalCount - firstBatch
+    const remaining = Math.min(totalCount - firstBatch, 16)
 
     try {
-      const titleParam = encodeURIComponent(set.title)
-
-      // Kick off both fetches in parallel
       const firstPromise = fetch(`/api/quizlet-set?title=${titleParam}&count=${firstBatch}`).then(r => r.json() as Promise<FlashcardTerm[]>)
       const morePromise = remaining > 0
         ? fetch(`/api/quizlet-set?title=${titleParam}&count=${remaining}&offset=${firstBatch}`).then(r => r.json() as Promise<FlashcardTerm[]>)
@@ -100,20 +135,21 @@ export default function SourceSearchModal({ open, onClose, onAdd, onUpdateConten
 
       if (remaining > 0) setLoadingMoreTerms(true)
 
-      // Show first batch as soon as it's ready
       const first = await firstPromise
+      popularTermsCache.set(set.title, first)
       setTerms(first)
       setTermsLoading(false)
 
-      // Append second batch when it arrives
       const more = await morePromise
       if (more.length > 0) {
-        setTerms(prev => [...prev, ...more])
-        // If the user already added the source, update its content with all terms
+        const allTerms = [...first, ...more]
+        popularTermsCache.set(set.title, allTerms)
+        setTerms(allTerms)
         if (pendingUpdateRef.current && onUpdateContent) {
-          const allTerms = [...first, ...more]
-          const allContent = allTerms.map(t => `${t.term}: ${t.definition}`).join('\n')
-          onUpdateContent(pendingUpdateRef.current.sourceId, allContent)
+          onUpdateContent(
+            pendingUpdateRef.current.sourceId,
+            allTerms.map(t => `${t.term}: ${t.definition}`).join('\n')
+          )
           pendingUpdateRef.current = null
         }
       }
@@ -198,7 +234,7 @@ export default function SourceSearchModal({ open, onClose, onAdd, onUpdateConten
             <div className="px-[var(--q-space-24)] pb-[var(--q-space-20)] flex items-center gap-[var(--q-space-8)] flex-shrink-0">
               <span className="material-symbols-rounded text-[var(--q-text-secondary)]" style={{ fontSize: 16 }}>trending_up</span>
               <p className="q-sh5 text-[var(--q-text-secondary)]">
-                {query ? `Results for "${query}"` : 'Popular on Quizlet'}
+                {query ? `Results for "${query}"` : 'Popular essay prep'}
               </p>
             </div>
 

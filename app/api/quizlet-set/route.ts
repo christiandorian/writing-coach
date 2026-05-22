@@ -8,7 +8,7 @@ export interface FlashcardTerm {
 
 export async function GET(req: NextRequest) {
   const title = req.nextUrl.searchParams.get('title') ?? ''
-  const count = Math.min(parseInt(req.nextUrl.searchParams.get('count') ?? '12'), 40)
+  const count = Math.min(parseInt(req.nextUrl.searchParams.get('count') ?? '8'), 16)
   const offset = parseInt(req.nextUrl.searchParams.get('offset') ?? '0')
 
   try {

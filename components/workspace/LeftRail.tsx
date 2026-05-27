@@ -7,6 +7,7 @@ import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import { createClient } from '@/lib/supabase/client'
 import SourceSearchModal, { prefetchPopularSets } from '@/components/workspace/SourceSearchModal'
+import Tooltip from '@/components/ui/Tooltip'
 import type { QuizletSet } from '@/app/api/quizlet-search/route'
 
 export default function LeftRail({ sourcesLoading = false }: { sourcesLoading?: boolean }) {
@@ -177,15 +178,16 @@ export default function LeftRail({ sourcesLoading = false }: { sourcesLoading?: 
         <div className="flex items-center gap-[var(--q-space-4)]">
           {/* Add button with dropdown */}
           <div className="relative" ref={menuRef}>
-            <Button
-              variant="text-secondary"
-              size="medium"
-              circle
-              onClick={() => setAddMenuOpen((v) => !v)}
-              title="Add source"
-            >
-              <span className="material-symbols-rounded" style={{ fontSize: 20 }}>add_2</span>
-            </Button>
+            <Tooltip text="Add source" position="bottom">
+              <Button
+                variant="text-secondary"
+                size="medium"
+                circle
+                onClick={() => setAddMenuOpen((v) => !v)}
+              >
+                <span className="material-symbols-rounded" style={{ fontSize: 20 }}>add_2</span>
+              </Button>
+            </Tooltip>
 
             {addMenuOpen && (
               <div
@@ -215,9 +217,11 @@ export default function LeftRail({ sourcesLoading = false }: { sourcesLoading?: 
             )}
           </div>
 
-          <Button variant="text-secondary" size="medium" circle onClick={() => setSearchModalOpen(true)} title="Search Quizlet">
-            <span className="material-symbols-rounded" style={{ fontSize: 20 }}>search</span>
-          </Button>
+          <Tooltip text="Search" position="bottom">
+            <Button variant="text-secondary" size="medium" circle onClick={() => setSearchModalOpen(true)}>
+              <span className="material-symbols-rounded" style={{ fontSize: 20 }}>search</span>
+            </Button>
+          </Tooltip>
         </div>
       </div>
 
@@ -571,15 +575,16 @@ function SourceItem({ source, loading = false, onToggle, onRemove }: { source: S
 
         {/* More options menu */}
         <div className="relative flex-shrink-0" ref={menuRef}>
-          <Button
-            variant="text-secondary"
-            size="medium"
-            circle
-            onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v) }}
-            title="More options"
-          >
-            <span className="material-symbols-rounded" style={{ fontSize: 24 }}>more_horiz</span>
-          </Button>
+          <Tooltip text="More" position="bottom">
+            <Button
+              variant="text-secondary"
+              size="medium"
+              circle
+              onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v) }}
+            >
+              <span className="material-symbols-rounded" style={{ fontSize: 24 }}>more_horiz</span>
+            </Button>
+          </Tooltip>
 
           {menuOpen && (
             <div
@@ -611,18 +616,19 @@ function SourceItem({ source, loading = false, onToggle, onRemove }: { source: S
         </div>
 
         {/* Select/deselect */}
-        <Button
-          variant="text-secondary"
-          size="medium"
-          circle
-          onClick={(e) => { e.stopPropagation(); onToggle() }}
-          title={source.selected ? 'Deselect' : 'Select'}
-          className={`flex-shrink-0 transition-colors ${source.selected ? 'text-[var(--q-twilight-500)]' : ''}`}
-        >
-          <span className="material-symbols-rounded" style={{ fontSize: 24 }}>
-            {source.selected ? 'check_circle' : 'radio_button_unchecked'}
-          </span>
-        </Button>
+        <Tooltip text={source.selected ? 'Deselect' : 'Select'} position="bottom">
+          <Button
+            variant="text-secondary"
+            size="medium"
+            circle
+            onClick={(e) => { e.stopPropagation(); onToggle() }}
+            className={`flex-shrink-0 transition-colors ${source.selected ? 'text-[var(--q-twilight-500)]' : ''}`}
+          >
+            <span className="material-symbols-rounded" style={{ fontSize: 24 }}>
+              {source.selected ? 'check_circle' : 'radio_button_unchecked'}
+            </span>
+          </Button>
+        </Tooltip>
       </div>
 
       {/* View source modal */}

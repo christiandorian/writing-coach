@@ -9,16 +9,17 @@ import CountdownTimer from '@/components/session/CountdownTimer'
 import WordCount from '@/components/session/WordCount'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
+import Tooltip from '@/components/ui/Tooltip'
 import { useState, useRef, useEffect } from 'react'
 import type { FeedbackResponse } from '@/lib/types'
 import type { PromptCategory, TimeLimitOption } from '@/lib/types'
 
 const DIMENSIONS = [
-  { key: 'position_clarity' as const, name: 'Position Clarity', label: 'Is there a clear, unambiguous thesis?' },
-  { key: 'argument_structure' as const, name: 'Argument Structure', label: 'Is the response logically organized?' },
-  { key: 'logical_consistency' as const, name: 'Logical Consistency', label: 'Do the points support each other?' },
-  { key: 'use_of_evidence' as const, name: 'Use of Evidence', label: 'Are claims supported or reasoned?' },
-  { key: 'tradeoff_awareness' as const, name: 'Tradeoff Awareness', label: 'Were counterarguments acknowledged?' },
+  { key: 'position_clarity' as const, name: 'Position clarity', label: 'Is there a clear, unambiguous thesis?' },
+  { key: 'argument_structure' as const, name: 'Argument structure', label: 'Is the response logically organized?' },
+  { key: 'logical_consistency' as const, name: 'Logical consistency', label: 'Do the points support each other?' },
+  { key: 'use_of_evidence' as const, name: 'Use of evidence', label: 'Are claims supported or reasoned?' },
+  { key: 'tradeoff_awareness' as const, name: 'Tradeoff awareness', label: 'Were counterarguments acknowledged?' },
 ]
 
 const CATEGORIES: { value: PromptCategory; label: string; desc: string }[] = [
@@ -495,11 +496,13 @@ function PromptWritingState() {
                   )}
                 </AnimatePresence>
               </div>
-              <Button variant="text-secondary" circle size="medium" onClick={() => setPromptOpen(v => !v)}>
-                <span className="material-symbols-rounded" style={{ fontSize: 20 }}>
-                  {promptOpen ? 'expand_less' : 'expand_more'}
-                </span>
-              </Button>
+              <Tooltip text={promptOpen ? 'Collapse' : 'Expand'} position="bottom">
+                <Button variant="text-secondary" circle size="medium" onClick={() => setPromptOpen(v => !v)}>
+                  <span className="material-symbols-rounded" style={{ fontSize: 20 }}>
+                    {promptOpen ? 'expand_less' : 'expand_more'}
+                  </span>
+                </Button>
+              </Tooltip>
             </div>
 
             {/* Body — only this section animates height */}
@@ -531,29 +534,31 @@ function PromptWritingState() {
 
           {/* Buttons — absolutely overlaid top-right so textarea starts from the top */}
           <div className="absolute top-[var(--q-space-8)] right-[var(--q-space-12)] flex items-center gap-[var(--q-space-8)] z-10">
-            <Button
-              variant="text-secondary"
-              circle
-              size="medium"
-              onClick={() => setIsScratchPad(v => !v)}
-              title="Scratch pad"
-            >
-              <span
-                className="material-symbols-rounded"
-                style={{ fontSize: 20, color: isScratchPad ? 'var(--q-text-highlight)' : undefined }}
-              >edit_note</span>
-            </Button>
-            <Button
-              variant="text-secondary"
-              circle
-              size="medium"
-              onClick={() => setIsExpanded(v => !v)}
-              title="Expand"
-            >
-              <span className="material-symbols-rounded" style={{ fontSize: 20 }}>
-                {isExpanded ? 'collapse_content' : 'expand_content'}
-              </span>
-            </Button>
+            <Tooltip text="Scratch pad">
+              <Button
+                variant="text-secondary"
+                circle
+                size="medium"
+                onClick={() => setIsScratchPad(v => !v)}
+              >
+                <span
+                  className="material-symbols-rounded"
+                  style={{ fontSize: 20, color: isScratchPad ? 'var(--q-text-highlight)' : undefined }}
+                >edit_note</span>
+              </Button>
+            </Tooltip>
+            <Tooltip text={isExpanded ? 'Collapse' : 'Expand'}>
+              <Button
+                variant="text-secondary"
+                circle
+                size="medium"
+                onClick={() => setIsExpanded(v => !v)}
+              >
+                <span className="material-symbols-rounded" style={{ fontSize: 20 }}>
+                  {isExpanded ? 'collapse_content' : 'expand_content'}
+                </span>
+              </Button>
+            </Tooltip>
           </div>
 
           {/* Content area — switches between response and scratch pad templates */}
@@ -708,15 +713,53 @@ function PromptWritingState() {
 
 /* ── Submitting ───────────────────────────────────────────────────────────── */
 
+const SUBMITTING_LABELS = [
+  'Analyzing position clarity...',
+  'Analyzing argument structure...',
+  'Analyzing logical consistency...',
+  'Analyzing use of evidence...',
+  'Analyzing tradeoff awareness...',
+]
+
 function SubmittingState() {
+  const [labelIdx, setLabelIdx] = useState(0)
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setLabelIdx(i => (i + 1) % SUBMITTING_LABELS.length)
+    }, 1800)
+    return () => clearInterval(id)
+  }, [])
+
   return panel(
-    <div className="flex flex-col items-center justify-center h-full gap-[var(--q-space-16)] bg-[var(--q-surface-base)]">
-      <div className="w-14 h-14 bg-[var(--q-twilight-100)] rounded-[var(--q-radius-full)] flex items-center justify-center">
-        <div className="w-6 h-6 border-2 border-[var(--q-twilight-500)] border-t-transparent rounded-full animate-spin" />
-      </div>
-      <div className="text-center space-y-[var(--q-space-4)]">
-        <p className="q-sh3 text-[var(--q-text-primary)]">Analyzing your reasoning...</p>
-        <p className="q-b4 text-[var(--q-text-muted)]">This takes about 10 seconds</p>
+    <div className="flex flex-col items-center justify-center h-full bg-[var(--q-surface-base)]">
+      <div className="flex flex-col items-center gap-[var(--q-space-32)] w-[460px]">
+        {/* Quizlet-style spinner — thin arc, no background circle */}
+        <div
+          className="rounded-full animate-spin flex-shrink-0"
+          style={{
+            width: 48,
+            height: 48,
+            border: '3px solid var(--q-twilight-200)',
+            borderTopColor: 'var(--q-twilight-500)',
+          }}
+        />
+
+        <div className="flex flex-col items-center gap-[var(--q-space-8)] text-center">
+          <AnimatePresence mode="wait">
+            <motion.p
+              key={labelIdx}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.25, ease: [0.25, 0.46, 0.45, 0.94] }}
+              className="q-h2 text-[var(--q-text-primary)]"
+            >
+              {SUBMITTING_LABELS[labelIdx]}
+            </motion.p>
+          </AnimatePresence>
+          <p className="q-sh3 text-[var(--q-text-secondary)]">This takes about 10 seconds</p>
+        </div>
       </div>
     </div>
   )
@@ -830,6 +873,29 @@ function annotateEssay(
   return segments.length > 0 ? segments : [{ text, key: null }]
 }
 
+/* ── Diagnosis text splitter ──────────────────────────────────────────────── */
+
+// Splits a diagnosis string into an observation (q-b4) and a suggestion (q-sh4).
+// Splits at the first sentence boundary followed by a contrast/improvement pivot word.
+const SUGGESTION_PIVOTS = [
+  'However,', 'But ', 'That said,', 'To improve', 'Consider ', 'Yet,',
+  'Still,', 'Although ', 'While ', 'Note that', 'Keep in mind', 'More ',
+  'With more', 'Adding ', 'Including ', 'Additionally,', 'Moreover,',
+]
+
+function splitDiagnosis(text: string): { observation: string; suggestion: string | null } {
+  for (const pivot of SUGGESTION_PIVOTS) {
+    const idx = text.indexOf(`. ${pivot}`)
+    if (idx !== -1) {
+      return {
+        observation: text.slice(0, idx + 1).trim(),
+        suggestion: text.slice(idx + 2).trim(),
+      }
+    }
+  }
+  return { observation: text, suggestion: null }
+}
+
 /* ── Feedback ─────────────────────────────────────────────────────────────── */
 
 function FeedbackState() {
@@ -847,6 +913,7 @@ function FeedbackState() {
   const rightPanelRef = useRef<HTMLDivElement | null>(null)
   const leftPanelRef = useRef<HTMLDivElement | null>(null)
   const [hoveredCompDimKey, setHoveredCompDimKey] = useState<string | null>(null)
+  const [markTooltip, setMarkTooltip] = useState<{ label: string; top: number; left: number } | null>(null)
   const [isPendingScratchPad, setIsPendingScratchPad] = useState(false)
   const [pendingScratchPadText, setPendingScratchPadText] = useState('')
   const [isPendingExpanded, setIsPendingExpanded] = useState(false)
@@ -971,9 +1038,11 @@ function FeedbackState() {
             )}
           </AnimatePresence>
         </div>
-        <Button variant="text-secondary" circle size="medium" tabIndex={-1}>
-          <span className="material-symbols-rounded" style={{ fontSize: 20 }}>{promptOpen ? 'expand_less' : 'expand_more'}</span>
-        </Button>
+        <Tooltip text={promptOpen ? 'Collapse' : 'Expand'} position="bottom">
+          <Button variant="text-secondary" circle size="medium" tabIndex={-1}>
+            <span className="material-symbols-rounded" style={{ fontSize: 20 }}>{promptOpen ? 'expand_less' : 'expand_more'}</span>
+          </Button>
+        </Tooltip>
       </div>
       <AnimatePresence initial={false}>
         {promptOpen && (
@@ -991,8 +1060,32 @@ function FeedbackState() {
     </div>
   )
 
+  const showMarkTooltip = (e: React.MouseEvent, key: string, score: number) => {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const dim = DIMENSIONS.find(d => d.key === key)
+    if (!dim) return
+    setMarkTooltip({ label: `${dim.name} ${score}/20`, top: rect.bottom + 4, left: rect.left + rect.width / 2 })
+  }
+
   return panel(
     <div className="flex flex-col h-full bg-[var(--q-surface-base)]">
+
+      {/* Mark tooltip — fixed-position so it escapes any overflow:hidden ancestor */}
+      <AnimatePresence>
+        {markTooltip && (
+          <motion.div
+            key="mark-tooltip"
+            initial={{ opacity: 0, x: '-50%', y: -4 }}
+            animate={{ opacity: 1, x: '-50%', y: 0 }}
+            exit={{ opacity: 0, x: '-50%', y: -4 }}
+            transition={{ duration: 0.12, ease: 'easeOut' }}
+            style={{ position: 'fixed', top: markTooltip.top, left: markTooltip.left, zIndex: 99999 }}
+            className="whitespace-nowrap pointer-events-none select-none px-[var(--q-space-8)] py-[var(--q-space-4)] bg-[var(--q-surface-inverse)] text-[var(--q-text-inverse)] q-sh5 rounded-[var(--q-radius-sm)]"
+          >
+            {markTooltip.label}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Tab bar */}
       {showTabs && (
@@ -1081,8 +1174,8 @@ function FeedbackState() {
                         return (
                           <mark key={si} className="cursor-pointer transition-colors rounded-sm"
                             style={{ backgroundColor: c.highlight, '--mark-hover-bg': c.hoverHighlight } as React.CSSProperties}
-                            onMouseEnter={() => setHoveredCompDimKey(seg.key!)}
-                            onMouseLeave={() => setHoveredCompDimKey(null)}>
+                            onMouseEnter={(e) => { setHoveredCompDimKey(seg.key!); showMarkTooltip(e, seg.key!, ds) }}
+                            onMouseLeave={() => { setHoveredCompDimKey(null); setMarkTooltip(null) }}>
                             {seg.text}
                           </mark>
                         )
@@ -1101,12 +1194,16 @@ function FeedbackState() {
             {PromptCard}
             <div className="bg-[var(--q-surface-base)] border-2 border-[var(--q-twilight-300)] rounded-[var(--q-radius-xl)] overflow-hidden flex flex-col relative flex-shrink-0">
               <div className="absolute top-[var(--q-space-8)] right-[var(--q-space-12)] flex items-center gap-[var(--q-space-8)] z-10">
-                <Button variant="text-secondary" circle size="medium" onClick={() => setIsPendingScratchPad(v => !v)} title="Scratch pad">
-                  <span className="material-symbols-rounded" style={{ fontSize: 20, color: isPendingScratchPad ? 'var(--q-text-highlight)' : undefined }}>edit_note</span>
-                </Button>
-                <Button variant="text-secondary" circle size="medium" onClick={() => setIsPendingExpanded(v => !v)} title="Expand">
-                  <span className="material-symbols-rounded" style={{ fontSize: 20 }}>{isPendingExpanded ? 'collapse_content' : 'expand_content'}</span>
-                </Button>
+                <Tooltip text="Scratch pad">
+                  <Button variant="text-secondary" circle size="medium" onClick={() => setIsPendingScratchPad(v => !v)}>
+                    <span className="material-symbols-rounded" style={{ fontSize: 20, color: isPendingScratchPad ? 'var(--q-text-highlight)' : undefined }}>edit_note</span>
+                  </Button>
+                </Tooltip>
+                <Tooltip text={isPendingExpanded ? 'Collapse' : 'Expand'}>
+                  <Button variant="text-secondary" circle size="medium" onClick={() => setIsPendingExpanded(v => !v)}>
+                    <span className="material-symbols-rounded" style={{ fontSize: 20 }}>{isPendingExpanded ? 'collapse_content' : 'expand_content'}</span>
+                  </Button>
+                </Tooltip>
               </div>
               {isPendingScratchPad ? (
                 pendingScratchPadTemplate === 'custom' ? (
@@ -1229,11 +1326,13 @@ function FeedbackState() {
                 <span className="q-sh3 text-[var(--q-twilight-600)]">Overall score {totalScore}/100</span>
               )}
               {!versionPending && (
-                <Button variant="text-secondary" circle size="small" tabIndex={-1} className="bg-[var(--q-btn-tertiary-bg)]">
-                  <span className="material-symbols-rounded" style={{ fontSize: 16 }}>
-                    {overallOpen ? 'expand_less' : 'expand_more'}
-                  </span>
-                </Button>
+                <Tooltip text={overallOpen ? 'Collapse' : 'Expand'} position="bottom">
+                  <Button variant="text-secondary" circle size="small" tabIndex={-1} className="bg-[var(--q-btn-tertiary-bg)]">
+                    <span className="material-symbols-rounded" style={{ fontSize: 16 }}>
+                      {overallOpen ? 'expand_less' : 'expand_more'}
+                    </span>
+                  </Button>
+                </Tooltip>
               )}
             </div>
             <AnimatePresence initial={false}>
@@ -1270,18 +1369,30 @@ function FeedbackState() {
                     {versionPending ? d.name : `${d.name} ${displayScore}/20`}
                   </span>
                   {!versionPending && (
-                    <Button variant="text-secondary" circle size="small" tabIndex={-1} className="bg-[var(--q-btn-tertiary-bg)]">
-                      <span className="material-symbols-rounded" style={{ fontSize: 16 }}>
-                        {isOpen ? 'expand_less' : 'expand_more'}
-                      </span>
-                    </Button>
+                    <Tooltip text={isOpen ? 'Collapse' : 'Expand'} position="bottom">
+                      <Button variant="text-secondary" circle size="small" tabIndex={-1} className="bg-[var(--q-btn-tertiary-bg)]">
+                        <span className="material-symbols-rounded" style={{ fontSize: 16 }}>
+                          {isOpen ? 'expand_less' : 'expand_more'}
+                        </span>
+                      </Button>
+                    </Tooltip>
                   )}
                 </div>
                 <AnimatePresence initial={false}>
                   {isOpen && (
                     <motion.div key={`${d.key}-body`} initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2, ease: [0.30, 0.00, 0.44, 1.00] }} className="overflow-hidden">
                       <div className="px-[var(--q-space-16)] py-[var(--q-space-16)] space-y-[var(--q-space-16)]">
-                        <p className="q-b4 text-[var(--q-text-primary)] leading-relaxed">{displayedFeedback.dimensions[d.key].diagnosis}</p>
+                        {(() => {
+                          const { observation, suggestion } = splitDiagnosis(displayedFeedback.dimensions[d.key].diagnosis)
+                          return (
+                            <p className="q-b4 text-[var(--q-text-primary)] leading-relaxed">
+                              {observation}
+                              {suggestion && (
+                                <span className="q-sh4 text-[var(--q-text-primary)]"> {suggestion}</span>
+                              )}
+                            </p>
+                          )
+                        })()}
                         <div className="rounded-[var(--q-radius-xl)] p-[var(--q-space-16)] flex flex-col gap-[var(--q-space-8)] bg-[var(--q-mint-100)]">
                           <div className="flex items-center gap-[var(--q-space-6)]">
                             <span className="material-symbols-rounded" style={{ fontSize: 16, color: 'var(--q-text-success)' }}>wb_incandescent</span>
